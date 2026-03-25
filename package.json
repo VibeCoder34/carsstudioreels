@@ -6,12 +6,21 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "remotion:preview": "remotion preview src/remotion/index.tsx",
+    "remotion:render": "remotion render src/remotion/index.tsx CarReels out/car-reels.mp4"
   },
   "dependencies": {
+    "@remotion/cli": "^4.0.438",
+    "@remotion/player": "^4.0.438",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.99.3",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.577.0",
     "next": "16.2.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "remotion": "^4.0.438"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
