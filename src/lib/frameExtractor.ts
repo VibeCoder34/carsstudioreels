@@ -1,0 +1,75 @@
+/* Tarayıcı tarafında medya → base64 JPEG dönüşümleri */
+
+const MAX_PX = 1024;
+
+/** Görüntü dosyasını sıkıştırılmış base64 JPEG'e dönüştürür */
+export async function imageFileToBase64(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+
+    img.onload = () => {
+      const ratio = Math.min(MAX_PX / img.width, MAX_PX / img.height, 1);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.82).split(",")[1]);
+      URL.revokeObjectURL(url);
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(""); };
+    img.src = url;
+  });
+}
+
+/** Videodan tek bir kareyi base64 JPEG olarak çıkarır */
+function extractSingleFrame(video: HTMLVideoElement, atPercent: number): Promise<string> {
+  return new Promise((resolve) => {
+    const seek = () => {
+      video.currentTime = video.duration * atPercent;
+    };
+
+    const onSeeked = () => {
+      video.removeEventListener("seeked", onSeeked);
+      const ratio = Math.min(MAX_PX / video.videoWidth, MAX_PX / video.videoHeight, 1);
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(video.videoWidth * ratio);
+      canvas.height = Math.round(video.videoHeight * ratio);
+      canvas.getContext("2d")!.drawImage(video, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL("image/jpeg", 0.82).split(",")[1]);
+    };
+
+    video.addEventListener("seeked", onSeeked);
+    seek();
+  });
+}
+
+/**
+ * Videodan 4 eşit aralıklı kare çeker: %10, %33, %60, %85
+ * Böylece başlangıç, orta ve son bölümler Claude tarafından görülür.
+ */
+export async function extractVideoFrames(file: File): Promise<string[]> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "metadata";
+
+    video.onloadedmetadata = async () => {
+      const percents = [0.10, 0.33, 0.60, 0.85];
+      const frames: string[] = [];
+
+      for (const pct of percents) {
+        const frame = await extractSingleFrame(video, pct);
+        if (frame) frames.push(frame);
+      }
+
+      URL.revokeObjectURL(url);
+      resolve(frames);
+    };
+
+    video.onerror = () => { URL.revokeObjectURL(url); resolve([]); };
+    video.src = url;
+  });
+}
