@@ -13,6 +13,13 @@ import {
 export type MediaItem = {
   src: string;
   type: "image" | "video";
+  durationFrames?: number;
+  /**
+   * Video için opsiyonel trim bilgisi.
+   * startFrom/endAt değerleri Remotion `Video` props'larına (frame bazlı) map edilir.
+   */
+  inFrame?: number;
+  outFrame?: number;
 };
 
 export type PrestigeReelsProps = {
@@ -23,6 +30,8 @@ export type PrestigeReelsProps = {
   price: string;
   galleryName: string;
   ctaPhone?: string;
+  layout?: "portrait" | "landscape";
+  outroFrames?: number;
 };
 
 /* ─── Zamanlama sabitleri ────────────────────────────────── */
@@ -35,24 +44,44 @@ export const OUTRO_FRAMES = 90;
 /* ─── Yardımcı fonksiyonlar ──────────────────────────────── */
 
 export function getItemDuration(item: MediaItem): number {
-  return item.type === "video" ? VIDEO_FRAMES : PHOTO_FRAMES;
+  if (typeof item.durationFrames === "number") {
+    return Math.max(1, Math.floor(item.durationFrames));
+  }
+  if (item.type === "video") {
+    if (typeof item.inFrame === "number" && typeof item.outFrame === "number") {
+      return Math.max(1, item.outFrame - item.inFrame);
+    }
+    return VIDEO_FRAMES;
+  }
+  return PHOTO_FRAMES;
+}
+
+function getOverlapFrames(prev: MediaItem | null, next: MediaItem | null): number {
+  if (!prev || !next) return 0;
+  const prevDur = getItemDuration(prev);
+  const nextDur = getItemDuration(next);
+  // Overlap (crossfade) hiçbir zaman kliplerin yarısından büyük olmasın.
+  // Aksi halde opacity inputRange monotonik olmaz ve timeline geriye sarar.
+  const maxSafe = Math.max(0, Math.floor(Math.min(prevDur, nextDur) / 2) - 1);
+  return Math.min(CROSSFADE_FRAMES, maxSafe);
 }
 
 export function getItemStartFrame(items: MediaItem[], idx: number): number {
   let start = 0;
   for (let i = 0; i < idx; i++) {
-    start += getItemDuration(items[i]) - CROSSFADE_FRAMES;
+    start += getItemDuration(items[i]) - getOverlapFrames(items[i], items[i + 1] ?? null);
   }
   return start;
 }
 
-export function getTotalFrames(items: MediaItem[]): number {
+export function getTotalFrames(items: MediaItem[], opts?: { outroFrames?: number }): number {
   if (!items.length) return 30;
+  const outroFrames = Math.max(0, opts?.outroFrames ?? OUTRO_FRAMES);
   let total = getItemDuration(items[0]);
   for (let i = 1; i < items.length; i++) {
-    total += getItemDuration(items[i]) - CROSSFADE_FRAMES;
+    total += getItemDuration(items[i]) - getOverlapFrames(items[i - 1] ?? null, items[i]);
   }
-  return total + OUTRO_FRAMES;
+  return total + outroFrames;
 }
 
 /* ─── Ease fonksiyonu (lineer yerine smooth hareket) ─────── */
@@ -85,6 +114,12 @@ const COLOR_GRADES = [
   "contrast(1.12) saturate(0.60) brightness(0.85) sepia(0.05)",            // muted warm
 ];
 
+/* ─── Video "edit" presetleri (seek yapmadan) ────────────── */
+
+const VIDEO_SEGMENT_FRAMES = 40; // ~1.33s @ 30fps
+const VIDEO_ZOOM_STEPS = [1.0, 1.025, 1.01, 1.035, 1.015, 1.03];
+const VIDEO_GRADE_STEPS = [0, 3, 1, 4, 2, 0];
+
 /* ─── Tek bir medya slaydı ───────────────────────────────── */
 
 function MediaSlide({
@@ -100,13 +135,40 @@ function MediaSlide({
   const startFrame = getItemStartFrame(items, index);
   const duration = getItemDuration(item);
   const endFrame = startFrame + duration;
+  const localFrame = Math.max(0, frame - startFrame);
 
-  const opacity = interpolate(
-    frame,
-    [startFrame, startFrame + CROSSFADE_FRAMES, endFrame - CROSSFADE_FRAMES, endFrame],
-    [0, 1, 1, 0],
-    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
-  );
+  const overlapIn = getOverlapFrames(items[index - 1] ?? null, item);
+  const overlapOut = getOverlapFrames(item, items[index + 1] ?? null);
+
+  const opacity = (() => {
+    // Remotion interpolate inputRange MUST be strictly increasing.
+    // overlapIn/out 0 olunca duplicate range oluşabiliyor, onu burada engelliyoruz.
+    if (overlapIn <= 0 && overlapOut <= 0) {
+      return frame >= startFrame && frame <= endFrame ? 1 : 0;
+    }
+    if (overlapIn <= 0) {
+      return interpolate(
+        frame,
+        [startFrame, endFrame - overlapOut, endFrame],
+        [1, 1, 0],
+        { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+      );
+    }
+    if (overlapOut <= 0) {
+      return interpolate(
+        frame,
+        [startFrame, startFrame + overlapIn, endFrame],
+        [0, 1, 1],
+        { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+      );
+    }
+    return interpolate(
+      frame,
+      [startFrame, startFrame + overlapIn, endFrame - overlapOut, endFrame],
+      [0, 1, 1, 0],
+      { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+    );
+  })();
 
   if (opacity === 0) return null;
 
@@ -114,17 +176,42 @@ function MediaSlide({
   const rawProgress = duration > 0 ? Math.max(0, frame - startFrame) / duration : 0;
   const progress = easeInOut(Math.min(1, rawProgress));
 
-  const scale = kb.fromScale + (kb.toScale - kb.fromScale) * progress;
-  const tx = kb.fromX + (kb.toX - kb.fromX) * progress;
-  const ty = kb.fromY + (kb.toY - kb.fromY) * progress;
+  // Video zaten hareketli olduğu için Ken Burns efektini daha yumuşak tut.
+  const effectiveKb = item.type === "video"
+    ? { ...kb, fromScale: 1.0, toScale: 1.0, fromX: 0, toX: 0, fromY: 0, toY: 0 }
+    : kb;
 
-  const colorGrade = COLOR_GRADES[index % COLOR_GRADES.length];
+  const scale = effectiveKb.fromScale + (effectiveKb.toScale - effectiveKb.fromScale) * progress;
+  const tx = effectiveKb.fromX + (effectiveKb.toX - effectiveKb.fromX) * progress;
+  const ty = effectiveKb.fromY + (effectiveKb.toY - effectiveKb.fromY) * progress;
+
+  const segmentIndex = item.type === "video"
+    ? Math.min(Math.floor(localFrame / VIDEO_SEGMENT_FRAMES), VIDEO_ZOOM_STEPS.length - 1)
+    : 0;
+
+  const segmentZoom = item.type === "video" ? VIDEO_ZOOM_STEPS[segmentIndex] : 1;
+  const gradeIndex = item.type === "video" ? VIDEO_GRADE_STEPS[segmentIndex] : (index % COLOR_GRADES.length);
+  const colorGrade = COLOR_GRADES[gradeIndex % COLOR_GRADES.length];
+
+  // Segment başlangıçlarında mini "flash cut" (seek yok, sadece hissiyat)
+  const segmentBoundary = item.type === "video" ? localFrame % VIDEO_SEGMENT_FRAMES : 9999;
+  const flash = item.type === "video"
+    ? interpolate(segmentBoundary, [0, 4, 10], [0.18, 0.0, 0.0], {
+      extrapolateLeft: "clamp",
+      extrapolateRight: "clamp",
+    })
+    : 0;
+
+  // Hafif hız değişimi (edit hissi)
+  const playbackRate = item.type === "video"
+    ? 1.0 + (segmentIndex % 2 === 0 ? 0.06 : 0.0)
+    : 1.0;
 
   const mediaStyle: React.CSSProperties = {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    transform: `scale(${scale}) translate(${tx}px, ${ty}px)`,
+    transform: `scale(${scale * segmentZoom}) translate(${tx}px, ${ty}px)`,
     transformOrigin: "center center",
     filter: colorGrade,
   };
@@ -134,7 +221,24 @@ function MediaSlide({
       {item.type === "image" ? (
         <Img src={item.src} style={mediaStyle} />
       ) : (
-        <Video src={item.src} style={mediaStyle} startFrom={0} muted />
+        <Video
+          src={item.src}
+          style={mediaStyle}
+          startFrom={item.inFrame ?? 0}
+          endAt={typeof item.outFrame === "number" ? item.outFrame : undefined}
+          playbackRate={playbackRate}
+          acceptableTimeShiftInSeconds={0.25}
+          muted
+        />
+      )}
+      {flash > 0 && (
+        <AbsoluteFill
+          style={{
+            background: `rgba(255,255,255,${flash})`,
+            pointerEvents: "none",
+            mixBlendMode: "screen",
+          }}
+        />
       )}
     </AbsoluteFill>
   );
@@ -179,18 +283,20 @@ function TransitionFlash({ items }: { items: MediaItem[] }) {
 function ProgressDots({
   items,
   totalFrames,
+  outroFrames,
 }: {
   items: MediaItem[];
   totalFrames: number;
+  outroFrames: number;
 }) {
   const frame = useCurrentFrame();
-  const outroStart = totalFrames - OUTRO_FRAMES;
+  const outroStart = totalFrames - outroFrames;
 
   // Outro'da gizle
   const dotsOpacity = interpolate(
     frame,
-    [outroStart - 20, outroStart],
-    [1, 0],
+    outroFrames > 0 ? [outroStart - 20, outroStart] : [0, 1],
+    outroFrames > 0 ? [1, 0] : [1, 1],
     { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
   );
 
@@ -294,14 +400,17 @@ function TextBlock({
   carModel,
   year,
   price,
+  layout,
 }: {
   carBrand: string;
   carModel: string;
   year: string;
   price: string;
+  layout: "portrait" | "landscape";
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
+  const isLandscape = layout === "landscape";
 
   // Center-out separator çizgisi
   const lineHalf = interpolate(frame, [10, 32], [0, 52], {
@@ -352,7 +461,7 @@ function TextBlock({
         bottom: 0,
         left: 0,
         right: 0,
-        padding: "0 72px 96px",
+        padding: isLandscape ? "0 96px 68px" : "0 72px 96px",
       }}
     >
       {/* Center-out dekoratif çizgi */}
@@ -379,7 +488,7 @@ function TextBlock({
         style={{
           fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif",
           fontWeight: 700,
-          fontSize: 96,
+          fontSize: isLandscape ? 72 : 96,
           color: "#ffffff",
           letterSpacing: "6px",
           textTransform: "uppercase",
@@ -397,7 +506,7 @@ function TextBlock({
         style={{
           fontFamily: "sans-serif",
           fontWeight: 300,
-          fontSize: 38,
+          fontSize: isLandscape ? 30 : 38,
           color: "rgba(255,255,255,0.72)",
           letterSpacing: "3px",
           marginTop: 14,
@@ -426,7 +535,7 @@ function TextBlock({
           style={{
             fontFamily: "sans-serif",
             fontWeight: 300,
-            fontSize: 30,
+            fontSize: isLandscape ? 24 : 30,
             color: "rgba(255,255,255,0.45)",
             letterSpacing: "3px",
           }}
@@ -444,7 +553,7 @@ function TextBlock({
           style={{
             fontFamily: "sans-serif",
             fontWeight: 700,
-            fontSize: 52,
+            fontSize: isLandscape ? 44 : 52,
             color: "#f8c96a",
             letterSpacing: "1px",
             textShadow: "0 0 36px rgba(248,201,106,0.5), 0 2px 12px rgba(0,0,0,0.4)",
@@ -459,8 +568,9 @@ function TextBlock({
 
 /* ─── Sağ üst galeri rozeti ──────────────────────────────── */
 
-function GalleryBadge({ name }: { name: string }) {
+function GalleryBadge({ name, layout }: { name: string; layout: "portrait" | "landscape" }) {
   const frame = useCurrentFrame();
+  const isLandscape = layout === "landscape";
 
   const slideX = interpolate(frame, [14, 38], [40, 0], {
     extrapolateLeft: "clamp",
@@ -476,8 +586,8 @@ function GalleryBadge({ name }: { name: string }) {
     <div
       style={{
         position: "absolute",
-        top: 68,
-        right: 68,
+        top: isLandscape ? 44 : 68,
+        right: isLandscape ? 44 : 68,
         opacity,
         transform: `translateX(${slideX}px)`,
         display: "flex",
@@ -511,7 +621,7 @@ function GalleryBadge({ name }: { name: string }) {
         style={{
           fontFamily: "sans-serif",
           fontWeight: 700,
-          fontSize: 30,
+          fontSize: isLandscape ? 26 : 30,
           color: "#ffffff",
           letterSpacing: "0.5px",
         }}
@@ -531,6 +641,7 @@ function OutroFrame({
   galleryName,
   ctaPhone,
   outroStartFrame,
+  layout,
 }: {
   carBrand: string;
   carModel: string;
@@ -538,10 +649,12 @@ function OutroFrame({
   galleryName: string;
   ctaPhone?: string;
   outroStartFrame: number;
+  layout: "portrait" | "landscape";
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const localFrame = frame - outroStartFrame;
+  const isLandscape = layout === "landscape";
 
   if (localFrame < 0) return null;
 
@@ -597,7 +710,7 @@ function OutroFrame({
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "0 56px",
+          padding: isLandscape ? "0 96px" : "0 56px",
           opacity: cardOpacity,
           transform: `translateY(${cardY}px)`,
         }}
@@ -610,7 +723,7 @@ function OutroFrame({
             WebkitBackdropFilter: "blur(36px)",
             border: "1px solid rgba(255,255,255,0.10)",
             borderRadius: 44,
-            padding: "64px 72px",
+            padding: isLandscape ? "48px 64px" : "64px 72px",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -662,7 +775,7 @@ function OutroFrame({
             style={{
               fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif",
               fontWeight: 700,
-              fontSize: 74,
+              fontSize: isLandscape ? 56 : 74,
               color: "#ffffff",
               letterSpacing: "4px",
               textTransform: "uppercase",
@@ -675,7 +788,7 @@ function OutroFrame({
             style={{
               fontFamily: "sans-serif",
               fontWeight: 300,
-              fontSize: 34,
+              fontSize: isLandscape ? 28 : 34,
               color: "rgba(255,255,255,0.62)",
               marginTop: 12,
               letterSpacing: "2.5px",
@@ -701,7 +814,7 @@ function OutroFrame({
             style={{
               fontFamily: "sans-serif",
               fontWeight: 700,
-              fontSize: 56,
+              fontSize: isLandscape ? 46 : 56,
               color: "#f8c96a",
               letterSpacing: "1px",
               textShadow:
@@ -714,14 +827,14 @@ function OutroFrame({
           {/* CTA butonu */}
           <div
             style={{
-              marginTop: 52,
+              marginTop: isLandscape ? 36 : 52,
               opacity: ctaOpacity,
               transform: `scale(${ctaScale})`,
               background: ctaPhone
                 ? "linear-gradient(135deg, #25D366, #128C7E)"
                 : "linear-gradient(135deg, #f97316, #dc2626)",
               borderRadius: 24,
-              padding: "28px 68px",
+              padding: isLandscape ? "22px 52px" : "28px 68px",
               display: "flex",
               alignItems: "center",
               gap: 16,
@@ -737,7 +850,7 @@ function OutroFrame({
               style={{
                 fontFamily: "sans-serif",
                 fontWeight: 700,
-                fontSize: 34,
+                fontSize: isLandscape ? 28 : 34,
                 color: "#ffffff",
                 letterSpacing: "0.5px",
               }}
@@ -761,9 +874,12 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   price,
   galleryName,
   ctaPhone,
+  layout = "portrait",
+  outroFrames = OUTRO_FRAMES,
 }) => {
-  const totalFrames = getTotalFrames(mediaItems);
-  const outroStartFrame = totalFrames - OUTRO_FRAMES;
+  const safeOutroFrames = Math.max(0, outroFrames);
+  const totalFrames = getTotalFrames(mediaItems, { outroFrames: safeOutroFrames });
+  const outroStartFrame = totalFrames - safeOutroFrames;
 
   return (
     <AbsoluteFill style={{ background: "#060608", overflow: "hidden" }}>
@@ -782,10 +898,10 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
       <TopGradient />
 
       {/* Slayt ilerleme noktaları */}
-      <ProgressDots items={mediaItems} totalFrames={totalFrames} />
+      <ProgressDots items={mediaItems} totalFrames={totalFrames} outroFrames={safeOutroFrames} />
 
       {/* Galeri rozeti */}
-      <GalleryBadge name={galleryName} />
+      <GalleryBadge name={galleryName} layout={layout} />
 
       {/* Alt metin */}
       <TextBlock
@@ -793,17 +909,21 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
         carModel={carModel}
         year={year}
         price={price}
+        layout={layout}
       />
 
       {/* Outro CTA */}
-      <OutroFrame
-        carBrand={carBrand}
-        carModel={carModel}
-        price={price}
-        galleryName={galleryName}
-        ctaPhone={ctaPhone}
-        outroStartFrame={outroStartFrame}
-      />
+      {safeOutroFrames > 0 && (
+        <OutroFrame
+          carBrand={carBrand}
+          carModel={carModel}
+          price={price}
+          galleryName={galleryName}
+          ctaPhone={ctaPhone}
+          outroStartFrame={outroStartFrame}
+          layout={layout}
+        />
+      )}
     </AbsoluteFill>
   );
 };

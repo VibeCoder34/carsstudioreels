@@ -73,3 +73,33 @@ export async function extractVideoFrames(file: File): Promise<string[]> {
     video.src = url;
   });
 }
+
+/**
+ * Videodan verilen percent noktalarında kare çıkarır (0-1 arası).
+ * `.mov` gibi formatlarda Remotion timeline seek sorununu by-pass etmek için
+ * video montajını bu karelerle (image montage) kurmakta kullanılır.
+ */
+export async function extractVideoFramesAtPercents(file: File, percents: number[]): Promise<string[]> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.preload = "metadata";
+
+    video.onloadedmetadata = async () => {
+      const frames: string[] = [];
+
+      for (const pctRaw of percents) {
+        const pct = Math.max(0, Math.min(1, pctRaw));
+        const frame = await extractSingleFrame(video, pct);
+        if (frame) frames.push(frame);
+      }
+
+      URL.revokeObjectURL(url);
+      resolve(frames);
+    };
+
+    video.onerror = () => { URL.revokeObjectURL(url); resolve([]); };
+    video.src = url;
+  });
+}

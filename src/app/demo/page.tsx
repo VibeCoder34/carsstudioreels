@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   Film, Upload, Plus, LayoutDashboard, FolderOpen, Layers,
   Settings, Wand2, TrendingUp, Sparkles, ArrowLeft, X,
@@ -13,7 +14,7 @@ import {
   getTotalFrames,
   type MediaItem,
 } from "@/remotion/PrestigeReels";
-import { imageFileToBase64, extractVideoFrames } from "@/lib/frameExtractor";
+import { imageFileToBase64, extractVideoFrames, extractVideoFramesAtPercents } from "@/lib/frameExtractor";
 
 const Player = dynamic(
   () => import("@remotion/player").then((m) => m.Player),
@@ -21,6 +22,122 @@ const Player = dynamic(
 );
 
 const FPS = 30;
+
+function isVideoFile(file: File): boolean {
+  if (file.type?.toLowerCase().startsWith("video/")) return true;
+  const name = file.name?.toLowerCase() ?? "";
+  return (
+    name.endsWith(".mp4") ||
+    name.endsWith(".mov") ||
+    name.endsWith(".m4v") ||
+    name.endsWith(".webm") ||
+    name.endsWith(".avi") ||
+    name.endsWith(".mkv")
+  );
+}
+
+function isImageFile(file: File): boolean {
+  if (file.type?.toLowerCase().startsWith("image/")) return true;
+  const name = file.name?.toLowerCase() ?? "";
+  return (
+    name.endsWith(".jpg") ||
+    name.endsWith(".jpeg") ||
+    name.endsWith(".png") ||
+    name.endsWith(".webp") ||
+    name.endsWith(".heic") ||
+    name.endsWith(".heif")
+  );
+}
+
+async function getVideoDurationSeconds(src: string): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+
+    video.onloadedmetadata = () => {
+      const d = Number.isFinite(video.duration) ? video.duration : 0;
+      resolve(d);
+    };
+
+    video.onerror = () => reject(new Error("Video okunamadı"));
+    video.src = src;
+    // Bazı tarayıcılarda metadata yüklemesini tetiklemek için gerekli olabiliyor.
+    video.load();
+  });
+}
+
+function buildOrbitClips(params: {
+  src: string;
+  durationSeconds: number;
+  fps: number;
+  clipCount?: number;
+  clipSeconds?: number;
+  padSeconds?: number;
+  windowSeconds?: number;
+}): MediaItem[] {
+  const {
+    src,
+    durationSeconds,
+    fps,
+    clipCount = 10,
+    clipSeconds = 1.6,
+    padSeconds = 1.0,
+    windowSeconds = 10,
+  } = params;
+
+  const durationFrames = Math.max(0, Math.floor(durationSeconds * fps));
+  const clipFrames = Math.max(1, Math.floor(clipSeconds * fps));
+
+  const windowFrames = Math.max(0, Math.min(durationFrames, Math.floor(windowSeconds * fps)));
+
+  const startMin = Math.floor(padSeconds * fps);
+  const startMax = Math.max(
+    startMin,
+    Math.min(
+      durationFrames - clipFrames - Math.floor(padSeconds * fps),
+      windowFrames - clipFrames - Math.floor(padSeconds * fps)
+    )
+  );
+
+  const safeCount = Math.max(1, Math.min(clipCount, 24));
+  const clips: MediaItem[] = [];
+
+  for (let i = 0; i < safeCount; i++) {
+    const t = safeCount === 1 ? 0.5 : i / (safeCount - 1);
+    const inFrame = Math.round(startMin + (startMax - startMin) * t);
+    const outFrame = Math.min(durationFrames, inFrame + clipFrames);
+
+    clips.push({
+      type: "video",
+      src,
+      inFrame,
+      outFrame,
+    });
+  }
+
+  return clips;
+}
+
+function buildOrbitIntroClip(params: {
+  src: string;
+  durationSeconds: number;
+  fps: number;
+  targetSeconds?: number;
+}): MediaItem[] {
+  const { src, durationSeconds, fps, targetSeconds = 8 } = params;
+  const durationFrames = Math.max(0, Math.floor(durationSeconds * fps));
+  const outFrame = Math.min(durationFrames, Math.max(1, Math.floor(targetSeconds * fps)));
+
+  return [
+    {
+      type: "video",
+      src,
+      inFrame: 0,
+      outFrame,
+    },
+  ];
+}
 
 /* ─── Tipler ─────────────────────────────────────────────── */
 
@@ -70,6 +187,8 @@ export default function DemoPage() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [analyzePhase, setAnalyzePhase] = useState("");
   const [analyzeError, setAnalyzeError] = useState("");
+  const [layout, setLayout] = useState<"portrait" | "landscape">("portrait");
+  const [outroFrames, setOutroFrames] = useState<number>(90);
   const [form, setForm] = useState<FormData>({
     carBrand: "BMW",
     carModel: "5 Serisi 530i xDrive",
@@ -82,15 +201,13 @@ export default function DemoPage() {
 
   const addFiles = useCallback((fileList: FileList | null) => {
     if (!fileList) return;
-    const newFiles = Array.from(fileList).filter(
-      (f) => f.type.startsWith("image/") || f.type.startsWith("video/")
-    );
+    const newFiles = Array.from(fileList).filter((f) => isImageFile(f) || isVideoFile(f));
     setFiles((prev) => [...prev, ...newFiles]);
     setMediaItems((prev) => [
       ...prev,
       ...newFiles.map((f) => ({
         src: URL.createObjectURL(f),
-        type: (f.type.startsWith("video/") ? "video" : "image") as "image" | "video",
+        type: (isVideoFile(f) ? "video" : "image") as "image" | "video",
       })),
     ]);
   }, []);
@@ -105,11 +222,69 @@ export default function DemoPage() {
     setStep("analyzing");
 
     try {
+      // Tek uzun "orbit" video için: videodan frame set çıkar → Claude sıralasın → Remotion'da 8 sn montage.
+      const isSingleVideo =
+        files.length === 1 && files[0] && isVideoFile(files[0]);
+      if (isSingleVideo) {
+        setAnalyzePhase("Videodan kareler çıkarılıyor...");
+
+        const file = files[0]!;
+        const frameCount = 12;
+        const percents = Array.from({ length: frameCount }, (_, i) => (i + 1) / (frameCount + 1));
+
+        const base64Frames = await extractVideoFramesAtPercents(file, percents);
+        if (base64Frames.length < 4) throw new Error("Videodan yeterli kare çıkarılamadı");
+
+        setAnalyzePhase("AI en sinematik sırayı seçiyor...");
+
+        // Claude API mevcut yapıda "medya bazlı" çalışıyor; bu yüzden her kareyi ayrı medya gibi gönderiyoruz.
+        const framesPayload = base64Frames.map((b64, i) => ({
+          base64Frames: [b64],
+          originalType: "image" as const,
+          index: i,
+        }));
+
+        const res = await fetch("/api/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ frames: framesPayload }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.details || err.error || "API hatası");
+        }
+
+        const result: AnalysisResult = await res.json();
+
+        const order = (result.suggestedOrder ?? [])
+          .filter((i) => typeof i === "number" && i >= 0 && i < base64Frames.length);
+        const fallbackOrder = Array.from({ length: base64Frames.length }, (_, i) => i);
+        const finalOrder = order.length ? order : fallbackOrder;
+
+        // 8 sn hedef: 240 frame @ 30fps. 10 kare seçip hızlı montage yapalım.
+        const targetFrames = 8 * FPS;
+        const take = Math.min(10, finalOrder.length);
+        const perItem = Math.max(8, Math.floor(targetFrames / take));
+
+        const montageItems: MediaItem[] = finalOrder.slice(0, take).map((idx, j) => ({
+          type: "image",
+          src: `data:image/jpeg;base64,${base64Frames[idx]}`,
+          durationFrames: j === 0 ? perItem + 6 : perItem, // opener biraz daha uzun
+        }));
+
+        setMediaItems(montageItems);
+        setAnalysisResult(result);
+        setOutroFrames(0);
+        setStep("preview");
+        return;
+      }
+
       // Aşama 1: Frame extraction
       setAnalyzePhase("Fotoğraflar hazırlanıyor...");
       const frames = await Promise.all(
         files.map(async (file, i) => {
-          const isVideo = file.type.startsWith("video/");
+          const isVideo = isVideoFile(file);
           const base64Frames = isVideo
             ? await extractVideoFrames(file)           // 4 kare: %10, %33, %60, %85
             : [await imageFileToBase64(file)];         // tek kare
@@ -150,6 +325,7 @@ export default function DemoPage() {
       setMediaItems(finalOrder.map((i) => mediaItems[i]));
       setFiles(finalOrder.map((i) => files[i]));
       setAnalysisResult(result);
+      setOutroFrames(90);
       setStep("preview");
     } catch (err) {
       console.error(err);
@@ -158,7 +334,10 @@ export default function DemoPage() {
     }
   };
 
-  const totalFrames = useMemo(() => getTotalFrames(mediaItems), [mediaItems]);
+  const totalFrames = useMemo(
+    () => getTotalFrames(mediaItems, { outroFrames }),
+    [mediaItems, outroFrames]
+  );
 
   return (
     <div className="min-h-screen bg-[#06060f] text-white flex">
@@ -241,12 +420,12 @@ export default function DemoPage() {
             <h1 className="text-lg font-semibold">Yeni Video Oluştur</h1>
           )}
           <div className="flex items-center gap-4">
-            <a href="/ai-video" className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
+            <Link href="/ai-video" className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
               <Zap className="w-3 h-3" /> AI Video Üretici
-            </a>
-            <a href="/" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
+            </Link>
+            <Link href="/" className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors">
               Ana Sayfaya Dön
-            </a>
+            </Link>
           </div>
         </header>
 
@@ -257,6 +436,8 @@ export default function DemoPage() {
             form={form}
             fileInputRef={fileInputRef}
             error={analyzeError}
+            layout={layout}
+            onLayoutChange={setLayout}
             onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -277,6 +458,8 @@ export default function DemoPage() {
             form={form}
             totalFrames={totalFrames}
             analysisResult={analysisResult}
+            layout={layout}
+            outroFrames={outroFrames}
             onReset={() => { setStep("upload"); setAnalysisResult(null); }}
           />
         )}
@@ -289,6 +472,8 @@ export default function DemoPage() {
 
 function UploadStep({
   mediaItems, isDragging, form, fileInputRef, error,
+  layout,
+  onLayoutChange,
   onDrop, onDragOver, onDragLeave, onFileChange,
   onRemoveItem, onFormChange, onAnalyze,
 }: {
@@ -297,6 +482,8 @@ function UploadStep({
   form: FormData;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   error: string;
+  layout: "portrait" | "landscape";
+  onLayoutChange: (layout: "portrait" | "landscape") => void;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
@@ -310,6 +497,35 @@ function UploadStep({
   return (
     <div className="flex-1 overflow-auto p-6">
       <div className="max-w-2xl mx-auto space-y-5">
+
+        {/* Format seçimi */}
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4">
+          <div className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Format</div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onLayoutChange("portrait"); }}
+              className={`px-3 py-2 rounded-xl text-sm border transition-all ${
+                layout === "portrait"
+                  ? "bg-orange-500/10 border-orange-500/30 text-orange-300"
+                  : "bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10"
+              }`}
+            >
+              Dikey (9:16)
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onLayoutChange("landscape"); }}
+              className={`px-3 py-2 rounded-xl text-sm border transition-all ${
+                layout === "landscape"
+                  ? "bg-orange-500/10 border-orange-500/30 text-orange-300"
+                  : "bg-white/5 border-white/10 text-zinc-300 hover:bg-white/10"
+              }`}
+            >
+              Yatay (16:9)
+            </button>
+          </div>
+        </div>
 
         {/* Şablon rozeti */}
         <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
@@ -507,15 +723,19 @@ function AnalyzingStep({ mediaItems, phase }: { mediaItems: MediaItem[]; phase: 
 /* ─── Preview adımı ──────────────────────────────────────── */
 
 function PreviewStep({
-  mediaItems, form, totalFrames, analysisResult, onReset,
+  mediaItems, form, totalFrames, analysisResult, layout, outroFrames, onReset,
 }: {
   mediaItems: MediaItem[];
   form: FormData;
   totalFrames: number;
   analysisResult: AnalysisResult | null;
+  layout: "portrait" | "landscape";
+  outroFrames: number;
   onReset: () => void;
 }) {
   const durationSec = (totalFrames / FPS).toFixed(1);
+  const compWidth = layout === "landscape" ? 1920 : 1080;
+  const compHeight = layout === "landscape" ? 1080 : 1920;
 
   return (
     <div className="flex-1 overflow-auto p-6">
@@ -548,15 +768,15 @@ function PreviewStep({
                 </div>
                 <div
                   className="rounded-[38px] overflow-hidden bg-black"
-                  style={{ aspectRatio: "9/19.5" }}
+                  style={{ aspectRatio: layout === "landscape" ? "16/9" : "9/19.5" }}
                 >
                   <Player
                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     component={PrestigeReels as any}
                     durationInFrames={totalFrames}
                     fps={FPS}
-                    compositionWidth={1080}
-                    compositionHeight={1920}
+                    compositionWidth={compWidth}
+                    compositionHeight={compHeight}
                     style={{ width: "100%", height: "100%" }}
                     controls
                     autoPlay
@@ -569,6 +789,8 @@ function PreviewStep({
                       price: form.price,
                       galleryName: "CarStudio",
                       ctaPhone: form.ctaPhone || undefined,
+                      layout,
+                      outroFrames,
                     }}
                   />
                 </div>
