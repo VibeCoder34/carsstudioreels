@@ -12,7 +12,9 @@ import {
 import {
   PrestigeReels,
   getTotalFrames,
+  STYLE_PRESETS,
   type MediaItem,
+  type ReelStyle,
 } from "@/remotion/PrestigeReels";
 import { imageFileToBase64, extractVideoFrames, extractVideoFramesAtPercents } from "@/lib/frameExtractor";
 
@@ -196,6 +198,7 @@ export default function DemoPage() {
     price: "₺2.850.000",
     ctaPhone: "0532 123 45 67",
   });
+  const [reelStyle, setReelStyle] = useState<ReelStyle>("cinematic");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -229,18 +232,22 @@ export default function DemoPage() {
         setAnalyzePhase("Videodan kareler çıkarılıyor...");
 
         const file = files[0]!;
+        const videoSrc = URL.createObjectURL(file);
         const frameCount = 12;
         const percents = Array.from({ length: frameCount }, (_, i) => (i + 1) / (frameCount + 1));
 
-        const base64Frames = await extractVideoFramesAtPercents(file, percents);
+        const [base64Frames, durationSeconds] = await Promise.all([
+          extractVideoFramesAtPercents(file, percents),
+          getVideoDurationSeconds(videoSrc),
+        ]);
         if (base64Frames.length < 4) throw new Error("Videodan yeterli kare çıkarılamadı");
 
         setAnalyzePhase("AI en sinematik sırayı seçiyor...");
 
-        // Claude API mevcut yapıda "medya bazlı" çalışıyor; bu yüzden her kareyi ayrı medya gibi gönderiyoruz.
+        // Her kareyi Claude'a video karesi olarak gönder
         const framesPayload = base64Frames.map((b64, i) => ({
           base64Frames: [b64],
-          originalType: "image" as const,
+          originalType: "video" as const,
           index: i,
         }));
 
@@ -262,16 +269,24 @@ export default function DemoPage() {
         const fallbackOrder = Array.from({ length: base64Frames.length }, (_, i) => i);
         const finalOrder = order.length ? order : fallbackOrder;
 
-        // 8 sn hedef: 240 frame @ 30fps. 10 kare seçip hızlı montage yapalım.
-        const targetFrames = 8 * FPS;
         const take = Math.min(10, finalOrder.length);
-        const perItem = Math.max(8, Math.floor(targetFrames / take));
+        const durationFrames = Math.floor(durationSeconds * FPS);
+        // Her clip ~1.5 sn, toplam ~8-10 sn montage
+        const clipFrames = Math.max(8, Math.round(FPS * STYLE_PRESETS[reelStyle].clipSeconds));
 
-        const montageItems: MediaItem[] = finalOrder.slice(0, take).map((idx, j) => ({
-          type: "image",
-          src: `data:image/jpeg;base64,${base64Frames[idx]}`,
-          durationFrames: j === 0 ? perItem + 6 : perItem, // opener biraz daha uzun
-        }));
+        // Claude'un seçtiği frame indekslerini videonun gerçek zaman pozisyonlarına map et
+        const montageItems: MediaItem[] = finalOrder.slice(0, take).map((idx) => {
+          const percent = (idx + 1) / (frameCount + 1);
+          const centerFrame = Math.round(percent * durationFrames);
+          const inFrame = Math.max(0, centerFrame - Math.floor(clipFrames / 2));
+          const outFrame = Math.min(durationFrames, inFrame + clipFrames);
+          return {
+            type: "video" as const,
+            src: videoSrc,
+            inFrame,
+            outFrame,
+          };
+        });
 
         setMediaItems(montageItems);
         setAnalysisResult(result);
@@ -335,8 +350,8 @@ export default function DemoPage() {
   };
 
   const totalFrames = useMemo(
-    () => getTotalFrames(mediaItems, { outroFrames }),
-    [mediaItems, outroFrames]
+    () => getTotalFrames(mediaItems, { outroFrames, crossfadeFrames: STYLE_PRESETS[reelStyle].crossfadeFrames }),
+    [mediaItems, outroFrames, reelStyle]
   );
 
   return (
@@ -437,7 +452,9 @@ export default function DemoPage() {
             fileInputRef={fileInputRef}
             error={analyzeError}
             layout={layout}
+            reelStyle={reelStyle}
             onLayoutChange={setLayout}
+            onStyleChange={setReelStyle}
             onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
             onDragLeave={() => setIsDragging(false)}
@@ -460,6 +477,7 @@ export default function DemoPage() {
             analysisResult={analysisResult}
             layout={layout}
             outroFrames={outroFrames}
+            reelStyle={reelStyle}
             onReset={() => { setStep("upload"); setAnalysisResult(null); }}
           />
         )}
@@ -472,8 +490,8 @@ export default function DemoPage() {
 
 function UploadStep({
   mediaItems, isDragging, form, fileInputRef, error,
-  layout,
-  onLayoutChange,
+  layout, reelStyle,
+  onLayoutChange, onStyleChange,
   onDrop, onDragOver, onDragLeave, onFileChange,
   onRemoveItem, onFormChange, onAnalyze,
 }: {
@@ -483,7 +501,9 @@ function UploadStep({
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   error: string;
   layout: "portrait" | "landscape";
+  reelStyle: ReelStyle;
   onLayoutChange: (layout: "portrait" | "landscape") => void;
+  onStyleChange: (style: ReelStyle) => void;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
@@ -654,6 +674,37 @@ function UploadStep({
           </div>
         </div>
 
+        {/* Stil seçici */}
+        <div className="bg-white/[0.03] border border-white/[0.06] rounded-2xl p-4 space-y-3">
+          <div className="text-xs text-zinc-500 uppercase tracking-wider">Video Stili</div>
+          <div className="grid grid-cols-3 gap-2">
+            {(Object.values(STYLE_PRESETS) as typeof STYLE_PRESETS[ReelStyle][]).map((preset) => {
+              const active = reelStyle === preset.id;
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => onStyleChange(preset.id)}
+                  className={`relative flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all ${
+                    active
+                      ? "bg-orange-500/10 border-orange-500/40 text-white"
+                      : "bg-white/[0.02] border-white/[0.07] text-zinc-400 hover:bg-white/[0.05] hover:border-white/[0.12]"
+                  }`}
+                >
+                  <span className="text-xl leading-none">{preset.emoji}</span>
+                  <span className={`text-xs font-semibold ${active ? "text-orange-300" : ""}`}>
+                    {preset.label}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 leading-tight">{preset.description}</span>
+                  {active && (
+                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-orange-400" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Analiz butonu */}
         <button
           onClick={onAnalyze}
@@ -723,7 +774,7 @@ function AnalyzingStep({ mediaItems, phase }: { mediaItems: MediaItem[]; phase: 
 /* ─── Preview adımı ──────────────────────────────────────── */
 
 function PreviewStep({
-  mediaItems, form, totalFrames, analysisResult, layout, outroFrames, onReset,
+  mediaItems, form, totalFrames, analysisResult, layout, outroFrames, reelStyle, onReset,
 }: {
   mediaItems: MediaItem[];
   form: FormData;
@@ -731,6 +782,7 @@ function PreviewStep({
   analysisResult: AnalysisResult | null;
   layout: "portrait" | "landscape";
   outroFrames: number;
+  reelStyle: ReelStyle;
   onReset: () => void;
 }) {
   const durationSec = (totalFrames / FPS).toFixed(1);
@@ -791,6 +843,7 @@ function PreviewStep({
                       ctaPhone: form.ctaPhone || undefined,
                       layout,
                       outroFrames,
+                      reelStyle,
                     }}
                   />
                 </div>

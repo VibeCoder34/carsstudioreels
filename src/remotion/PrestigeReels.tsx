@@ -32,13 +32,14 @@ export type PrestigeReelsProps = {
   ctaPhone?: string;
   layout?: "portrait" | "landscape";
   outroFrames?: number;
+  reelStyle?: ReelStyle;
 };
 
 /* ─── Zamanlama sabitleri ────────────────────────────────── */
 
 export const PHOTO_FRAMES = 90;
 export const VIDEO_FRAMES = 150;
-export const CROSSFADE_FRAMES = 30;
+export const CROSSFADE_FRAMES = 20;
 export const OUTRO_FRAMES = 90;
 
 /* ─── Yardımcı fonksiyonlar ──────────────────────────────── */
@@ -56,30 +57,29 @@ export function getItemDuration(item: MediaItem): number {
   return PHOTO_FRAMES;
 }
 
-function getOverlapFrames(prev: MediaItem | null, next: MediaItem | null): number {
+function getOverlapFrames(prev: MediaItem | null, next: MediaItem | null, crossfade = CROSSFADE_FRAMES): number {
   if (!prev || !next) return 0;
   const prevDur = getItemDuration(prev);
   const nextDur = getItemDuration(next);
-  // Overlap (crossfade) hiçbir zaman kliplerin yarısından büyük olmasın.
-  // Aksi halde opacity inputRange monotonik olmaz ve timeline geriye sarar.
   const maxSafe = Math.max(0, Math.floor(Math.min(prevDur, nextDur) / 2) - 1);
-  return Math.min(CROSSFADE_FRAMES, maxSafe);
+  return Math.min(crossfade, maxSafe);
 }
 
-export function getItemStartFrame(items: MediaItem[], idx: number): number {
+export function getItemStartFrame(items: MediaItem[], idx: number, crossfade = CROSSFADE_FRAMES): number {
   let start = 0;
   for (let i = 0; i < idx; i++) {
-    start += getItemDuration(items[i]) - getOverlapFrames(items[i], items[i + 1] ?? null);
+    start += getItemDuration(items[i]) - getOverlapFrames(items[i], items[i + 1] ?? null, crossfade);
   }
   return start;
 }
 
-export function getTotalFrames(items: MediaItem[], opts?: { outroFrames?: number }): number {
+export function getTotalFrames(items: MediaItem[], opts?: { outroFrames?: number; crossfadeFrames?: number }): number {
   if (!items.length) return 30;
   const outroFrames = Math.max(0, opts?.outroFrames ?? OUTRO_FRAMES);
+  const crossfade = opts?.crossfadeFrames ?? CROSSFADE_FRAMES;
   let total = getItemDuration(items[0]);
   for (let i = 1; i < items.length; i++) {
-    total += getItemDuration(items[i]) - getOverlapFrames(items[i - 1] ?? null, items[i]);
+    total += getItemDuration(items[i]) - getOverlapFrames(items[i - 1] ?? null, items[i], crossfade);
   }
   return total + outroFrames;
 }
@@ -104,21 +104,111 @@ const KB_VARIANTS = [
   { fromScale: 1.04, toScale: 1.10, fromX: 0,   toX: 0,   fromY: 30,  toY: -30 }, // yukarı + zoom
 ];
 
-/* ─── Per-slide sinematik renk gradyanları ───────────────── */
+/* ─── Geçiş & çıkış varyant tipleri ─────────────────────── */
 
-const COLOR_GRADES = [
-  "contrast(1.12) saturate(0.72) brightness(0.88)",                        // neutral
-  "contrast(1.08) saturate(0.65) brightness(0.86) sepia(0.07)",            // warm
-  "contrast(1.16) saturate(0.68) brightness(0.90) hue-rotate(-8deg)",      // cool
-  "contrast(1.10) saturate(0.78) brightness(0.87)",                        // vivid
-  "contrast(1.12) saturate(0.60) brightness(0.85) sepia(0.05)",            // muted warm
-];
+type TransitionVariant = "zoom-punch" | "blur-fade" | "slide-left" | "slide-right" | "scale-down";
+type ExitVariant = "scale-up" | "slide-exit-left" | "blur-out" | "slide-exit-right" | "fade-only";
 
-/* ─── Video "edit" presetleri (seek yapmadan) ────────────── */
+/* ─── Stil presetleri ────────────────────────────────────── */
 
-const VIDEO_SEGMENT_FRAMES = 40; // ~1.33s @ 30fps
-const VIDEO_ZOOM_STEPS = [1.0, 1.025, 1.01, 1.035, 1.015, 1.03];
-const VIDEO_GRADE_STEPS = [0, 3, 1, 4, 2, 0];
+export type ReelStyle = "cinematic" | "dynamic" | "luxury";
+
+export interface StylePreset {
+  id: ReelStyle;
+  label: string;
+  description: string;
+  emoji: string;
+  colorGrades: string[];
+  transitions: TransitionVariant[];
+  exits: ExitVariant[];
+  crossfadeFrames: number;
+  clipSeconds: number;
+  grainOpacity: number;
+  kbIntensity: number;       // 0–1; video KB etkisini ölçekler
+  lightLeakColors: string[]; // "rgba(r,g,b,VAL)" şablonları
+  lightLeakIntensity: number;
+}
+
+export const STYLE_PRESETS: Record<ReelStyle, StylePreset> = {
+  cinematic: {
+    id: "cinematic",
+    label: "Sinematik",
+    description: "Yavaş geçişler · Film rengi · Grain",
+    emoji: "🎬",
+    colorGrades: [
+      "contrast(1.12) saturate(0.60) brightness(0.84) sepia(0.08)",
+      "contrast(1.18) saturate(0.55) brightness(0.80) hue-rotate(4deg)",
+      "contrast(1.10) saturate(0.65) brightness(0.86)",
+      "contrast(1.14) saturate(0.58) brightness(0.82) sepia(0.12)",
+      "contrast(1.16) saturate(0.62) brightness(0.83) hue-rotate(-4deg)",
+    ],
+    transitions: ["blur-fade", "scale-down", "blur-fade", "zoom-punch", "scale-down"],
+    exits: ["blur-out", "fade-only", "blur-out", "scale-up", "fade-only"],
+    crossfadeFrames: 28,
+    clipSeconds: 2.5,
+    grainOpacity: 0.09,
+    kbIntensity: 0.3,
+    lightLeakColors: [
+      "rgba(255,230,180,VAL)",
+      "rgba(200,210,255,VAL)",
+      "rgba(255,255,240,VAL)",
+    ],
+    lightLeakIntensity: 0.18,
+  },
+
+  dynamic: {
+    id: "dynamic",
+    label: "Dinamik",
+    description: "Hızlı kesimler · Canlı renkler · Enerji",
+    emoji: "⚡",
+    colorGrades: [
+      "contrast(1.16) saturate(0.92) brightness(0.90) hue-rotate(-8deg)",
+      "contrast(1.20) saturate(1.00) brightness(0.88)",
+      "contrast(1.14) saturate(0.96) brightness(0.92) hue-rotate(6deg)",
+      "contrast(1.18) saturate(0.88) brightness(0.89)",
+      "contrast(1.22) saturate(0.94) brightness(0.87) hue-rotate(-4deg)",
+    ],
+    transitions: ["zoom-punch", "slide-left", "zoom-punch", "slide-right", "zoom-punch"],
+    exits: ["scale-up", "slide-exit-right", "scale-up", "slide-exit-left", "scale-up"],
+    crossfadeFrames: 10,
+    clipSeconds: 1.4,
+    grainOpacity: 0.03,
+    kbIntensity: 0.55,
+    lightLeakColors: [
+      "rgba(255,80,40,VAL)",
+      "rgba(255,200,0,VAL)",
+      "rgba(255,255,255,VAL)",
+      "rgba(255,120,0,VAL)",
+    ],
+    lightLeakIntensity: 0.34,
+  },
+
+  luxury: {
+    id: "luxury",
+    label: "Lüks",
+    description: "Zarif akışlar · Altın ton · Premium",
+    emoji: "✨",
+    colorGrades: [
+      "contrast(1.10) saturate(0.72) brightness(0.88) sepia(0.14) hue-rotate(-6deg)",
+      "contrast(1.12) saturate(0.68) brightness(0.86) sepia(0.18)",
+      "contrast(1.08) saturate(0.75) brightness(0.90) sepia(0.10)",
+      "contrast(1.14) saturate(0.70) brightness(0.87) sepia(0.16)",
+      "contrast(1.10) saturate(0.65) brightness(0.88) sepia(0.12) hue-rotate(-4deg)",
+    ],
+    transitions: ["scale-down", "blur-fade", "slide-left", "scale-down", "slide-right"],
+    exits: ["fade-only", "blur-out", "fade-only", "blur-out", "fade-only"],
+    crossfadeFrames: 22,
+    clipSeconds: 2.2,
+    grainOpacity: 0.05,
+    kbIntensity: 0.2,
+    lightLeakColors: [
+      "rgba(255,200,80,VAL)",
+      "rgba(255,220,120,VAL)",
+      "rgba(240,190,60,VAL)",
+    ],
+    lightLeakIntensity: 0.22,
+  },
+};
 
 /* ─── Tek bir medya slaydı ───────────────────────────────── */
 
@@ -126,19 +216,21 @@ function MediaSlide({
   item,
   index,
   items,
+  preset,
 }: {
   item: MediaItem;
   index: number;
   items: MediaItem[];
+  preset: StylePreset;
 }) {
   const frame = useCurrentFrame();
-  const startFrame = getItemStartFrame(items, index);
+  const startFrame = getItemStartFrame(items, index, preset.crossfadeFrames);
   const duration = getItemDuration(item);
   const endFrame = startFrame + duration;
   const localFrame = Math.max(0, frame - startFrame);
 
-  const overlapIn = getOverlapFrames(items[index - 1] ?? null, item);
-  const overlapOut = getOverlapFrames(item, items[index + 1] ?? null);
+  const overlapIn = getOverlapFrames(items[index - 1] ?? null, item, preset.crossfadeFrames);
+  const overlapOut = getOverlapFrames(item, items[index + 1] ?? null, preset.crossfadeFrames);
 
   const opacity = (() => {
     // Remotion interpolate inputRange MUST be strictly increasing.
@@ -176,44 +268,80 @@ function MediaSlide({
   const rawProgress = duration > 0 ? Math.max(0, frame - startFrame) / duration : 0;
   const progress = easeInOut(Math.min(1, rawProgress));
 
-  // Video zaten hareketli olduğu için Ken Burns efektini daha yumuşak tut.
-  const effectiveKb = item.type === "video"
-    ? { ...kb, fromScale: 1.0, toScale: 1.0, fromX: 0, toX: 0, fromY: 0, toY: 0 }
-    : kb;
+  // Video için Ken Burns: preset kbIntensity ile ölçeklenir
+  const kbMul = item.type === "video" ? preset.kbIntensity : 1.0;
+  const effectiveKb = {
+    fromScale: 1.0 + (kb.fromScale - 1.0) * kbMul,
+    toScale: 1.0 + (kb.toScale - 1.0) * kbMul,
+    fromX: kb.fromX * kbMul,
+    toX: kb.toX * kbMul,
+    fromY: kb.fromY * kbMul,
+    toY: kb.toY * kbMul,
+  };
 
-  const scale = effectiveKb.fromScale + (effectiveKb.toScale - effectiveKb.fromScale) * progress;
-  const tx = effectiveKb.fromX + (effectiveKb.toX - effectiveKb.fromX) * progress;
-  const ty = effectiveKb.fromY + (effectiveKb.toY - effectiveKb.fromY) * progress;
+  const kbScale = effectiveKb.fromScale + (effectiveKb.toScale - effectiveKb.fromScale) * progress;
+  const kbTx = effectiveKb.fromX + (effectiveKb.toX - effectiveKb.fromX) * progress;
+  const kbTy = effectiveKb.fromY + (effectiveKb.toY - effectiveKb.fromY) * progress;
 
-  const segmentIndex = item.type === "video"
-    ? Math.min(Math.floor(localFrame / VIDEO_SEGMENT_FRAMES), VIDEO_ZOOM_STEPS.length - 1)
+  // ─── Giriş efekti ─────────────────────────────────────────
+  const transition = preset.transitions[index % preset.transitions.length];
+  const entryDur = Math.min(18, Math.floor(duration * 0.25));
+  const entryP = easeOut(Math.min(1, localFrame / Math.max(1, entryDur)));
+
+  let entryScale = 1.0;
+  let entryTx = 0;
+  let entryTy = 0;
+  let entryBlur = 0;
+
+  if (transition === "zoom-punch") {
+    entryScale = 1.06 - 0.06 * entryP;
+  } else if (transition === "blur-fade") {
+    entryBlur = (1 - entryP) * 14;
+  } else if (transition === "slide-left") {
+    entryTx = (1 - entryP) * -55;
+  } else if (transition === "slide-right") {
+    entryTx = (1 - entryP) * 55;
+  } else if (transition === "scale-down") {
+    entryScale = 0.94 + 0.06 * entryP;
+  }
+
+  // ─── Çıkış efekti ─────────────────────────────────────────
+  const exitVariant = preset.exits[index % preset.exits.length];
+  const exitStart = Math.max(0, duration - overlapOut);
+  const exitP = overlapOut > 0
+    ? easeInOut(Math.min(1, Math.max(0, localFrame - exitStart) / overlapOut))
     : 0;
 
-  const segmentZoom = item.type === "video" ? VIDEO_ZOOM_STEPS[segmentIndex] : 1;
-  const gradeIndex = item.type === "video" ? VIDEO_GRADE_STEPS[segmentIndex] : (index % COLOR_GRADES.length);
-  const colorGrade = COLOR_GRADES[gradeIndex % COLOR_GRADES.length];
+  let exitScale = 1.0;
+  let exitTx = 0;
+  let exitBlur = 0;
 
-  // Segment başlangıçlarında mini "flash cut" (seek yok, sadece hissiyat)
-  const segmentBoundary = item.type === "video" ? localFrame % VIDEO_SEGMENT_FRAMES : 9999;
-  const flash = item.type === "video"
-    ? interpolate(segmentBoundary, [0, 4, 10], [0.18, 0.0, 0.0], {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    })
-    : 0;
+  if (exitVariant === "scale-up") {
+    exitScale = 1.0 + 0.05 * exitP;
+  } else if (exitVariant === "blur-out") {
+    exitBlur = exitP * 10;
+  } else if (exitVariant === "slide-exit-left") {
+    exitTx = exitP * -45;
+  } else if (exitVariant === "slide-exit-right") {
+    exitTx = exitP * 45;
+  }
+  // fade-only: sadece opacity, scale/translate değişmez
 
-  // Hafif hız değişimi (edit hissi)
-  const playbackRate = item.type === "video"
-    ? 1.0 + (segmentIndex % 2 === 0 ? 0.06 : 0.0)
-    : 1.0;
+  const finalScale = kbScale * entryScale * exitScale;
+  const finalTx = kbTx + entryTx + exitTx;
+  const finalTy = kbTy + entryTy;
+  const finalBlur = entryBlur + exitBlur;
+
+  const colorGrade = preset.colorGrades[index % preset.colorGrades.length];
+  const blurFilter = finalBlur > 0 ? ` blur(${finalBlur.toFixed(1)}px)` : "";
 
   const mediaStyle: React.CSSProperties = {
     width: "100%",
     height: "100%",
     objectFit: "cover",
-    transform: `scale(${scale * segmentZoom}) translate(${tx}px, ${ty}px)`,
+    transform: `scale(${finalScale}) translate(${finalTx}px, ${finalTy}px)`,
     transformOrigin: "center center",
-    filter: colorGrade,
+    filter: colorGrade + blurFilter,
   };
 
   return (
@@ -224,57 +352,73 @@ function MediaSlide({
         <Video
           src={item.src}
           style={mediaStyle}
-          startFrom={item.inFrame ?? 0}
-          endAt={typeof item.outFrame === "number" ? item.outFrame : undefined}
-          playbackRate={playbackRate}
-          acceptableTimeShiftInSeconds={0.25}
+          startFrom={Math.max(0, (item.inFrame ?? 0) - startFrame)}
+          endAt={item.outFrame}
+          playbackRate={1.0}
+          acceptableTimeShiftInSeconds={0.5}
           muted
-        />
-      )}
-      {flash > 0 && (
-        <AbsoluteFill
-          style={{
-            background: `rgba(255,255,255,${flash})`,
-            pointerEvents: "none",
-            mixBlendMode: "screen",
-          }}
         />
       )}
     </AbsoluteFill>
   );
 }
 
-/* ─── Slaytlar arası ışık flaşı ─────────────────────────── */
+/* ─── Geçişlerde light leak ──────────────────────────────── */
 
-function TransitionFlash({ items }: { items: MediaItem[] }) {
+function LightLeak({ items, preset }: { items: MediaItem[]; preset: StylePreset }) {
   const frame = useCurrentFrame();
 
-  let flashOpacity = 0;
-
   for (let i = 0; i < items.length - 1; i++) {
-    const nextStart = getItemStartFrame(items, i + 1);
-    // Geçişin orta noktası
-    const midpoint = nextStart - Math.floor(CROSSFADE_FRAMES / 2);
-    const halfFlash = 6;
+    const nextStart = getItemStartFrame(items, i + 1, preset.crossfadeFrames);
+    const halfLeak = 10;
+    const local = frame - (nextStart - halfLeak);
 
-    const local = frame - (midpoint - halfFlash);
-    if (local >= 0 && local <= halfFlash * 2) {
-      const t = local / (halfFlash * 2);
-      // Üçgen tepe: t=0.5'te max
+    if (local >= 0 && local <= halfLeak * 2) {
+      const t = local / (halfLeak * 2);
       const peakT = t < 0.5 ? t * 2 : (1 - t) * 2;
-      flashOpacity = Math.max(flashOpacity, easeOut(peakT) * 0.22);
+      const alpha = easeOut(peakT) * preset.lightLeakIntensity;
+
+      const colorTemplate = preset.lightLeakColors[i % preset.lightLeakColors.length];
+      const color = colorTemplate.replace("VAL", String(alpha));
+      const gradDir = i % 2 === 0 ? "to bottom right" : "to bottom left";
+
+      return (
+        <AbsoluteFill
+          style={{
+            background: `linear-gradient(${gradDir}, ${color}, transparent 60%)`,
+            pointerEvents: "none",
+            mixBlendMode: "screen",
+          }}
+        />
+      );
     }
   }
 
-  if (flashOpacity === 0) return null;
+  return null;
+}
+
+/* ─── Film grain overlay ─────────────────────────────────── */
+
+function FilmGrain({ opacity }: { opacity: number }) {
+  const frame = useCurrentFrame();
+  const seed = Math.floor(frame / 2);
 
   return (
-    <AbsoluteFill
-      style={{
-        background: `rgba(255,255,255,${flashOpacity})`,
-        pointerEvents: "none",
-      }}
-    />
+    <AbsoluteFill style={{ pointerEvents: "none", opacity }}>
+      <svg width="100%" height="100%" style={{ position: "absolute", inset: 0 }}>
+        <filter id={`grain-${seed}`}>
+          <feTurbulence
+            type="fractalNoise"
+            baseFrequency="0.72"
+            numOctaves="4"
+            seed={seed}
+            stitchTiles="stitch"
+          />
+          <feColorMatrix type="saturate" values="0" />
+        </filter>
+        <rect width="100%" height="100%" filter={`url(#grain-${seed})`} />
+      </svg>
+    </AbsoluteFill>
   );
 }
 
@@ -284,10 +428,12 @@ function ProgressDots({
   items,
   totalFrames,
   outroFrames,
+  crossfadeFrames,
 }: {
   items: MediaItem[];
   totalFrames: number;
   outroFrames: number;
+  crossfadeFrames: number;
 }) {
   const frame = useCurrentFrame();
   const outroStart = totalFrames - outroFrames;
@@ -305,7 +451,7 @@ function ProgressDots({
   // Hangi slayt aktif?
   let activeIndex = 0;
   for (let i = items.length - 1; i >= 0; i--) {
-    if (frame >= getItemStartFrame(items, i)) {
+    if (frame >= getItemStartFrame(items, i, crossfadeFrames)) {
       activeIndex = i;
       break;
     }
@@ -876,20 +1022,25 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   ctaPhone,
   layout = "portrait",
   outroFrames = OUTRO_FRAMES,
+  reelStyle = "cinematic",
 }) => {
+  const preset = STYLE_PRESETS[reelStyle];
   const safeOutroFrames = Math.max(0, outroFrames);
-  const totalFrames = getTotalFrames(mediaItems, { outroFrames: safeOutroFrames });
+  const totalFrames = getTotalFrames(mediaItems, { outroFrames: safeOutroFrames, crossfadeFrames: preset.crossfadeFrames });
   const outroStartFrame = totalFrames - safeOutroFrames;
 
   return (
     <AbsoluteFill style={{ background: "#060608", overflow: "hidden" }}>
       {/* Medya katmanları */}
       {mediaItems.map((item, i) => (
-        <MediaSlide key={i} item={item} index={i} items={mediaItems} />
+        <MediaSlide key={i} item={item} index={i} items={mediaItems} preset={preset} />
       ))}
 
-      {/* Slayt geçiş ışık flaşı */}
-      <TransitionFlash items={mediaItems} />
+      {/* Geçiş light leak */}
+      <LightLeak items={mediaItems} preset={preset} />
+
+      {/* Film grain */}
+      <FilmGrain opacity={preset.grainOpacity} />
 
       {/* Vignette + alt gradient */}
       <Vignette />
@@ -898,7 +1049,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
       <TopGradient />
 
       {/* Slayt ilerleme noktaları */}
-      <ProgressDots items={mediaItems} totalFrames={totalFrames} outroFrames={safeOutroFrames} />
+      <ProgressDots items={mediaItems} totalFrames={totalFrames} outroFrames={safeOutroFrames} crossfadeFrames={preset.crossfadeFrames} />
 
       {/* Galeri rozeti */}
       <GalleryBadge name={galleryName} layout={layout} />
