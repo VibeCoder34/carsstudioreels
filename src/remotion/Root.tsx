@@ -24,9 +24,9 @@ export const RemotionRoot: React.FC = () => {
       component={PrestigeReels}
       durationInFrames={getTotalFrames(TEST_ITEMS)}
       fps={30}
-      width={1080}
-      height={1920}
-      defaultProps={defaultProps}
+      width={1920}
+      height={1080}
+      defaultProps={{ ...defaultProps, layout: "landscape" }}
     />
   );
 };

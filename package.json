@@ -14,7 +14,6 @@
     "@anthropic-ai/sdk": "^0.82.0",
     "@remotion/cli": "^4.0.438",
     "@remotion/player": "^4.0.438",
-    "@runwayml/sdk": "^3.16.0",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.99.3",
     "clsx": "^2.1.1",

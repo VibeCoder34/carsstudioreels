@@ -7,6 +7,7 @@ import {
   useVideoConfig,
   spring,
 } from "remotion";
+import type { SceneVariant } from "@/lib/photoCategories";
 
 /* ─── Tipler ─────────────────────────────────────────────── */
 
@@ -20,6 +21,10 @@ export type MediaItem = {
    */
   inFrame?: number;
   outFrame?: number;
+  /** Claude storyboard — sahne animasyonu */
+  sceneVariant?: SceneVariant;
+  /** İngilizce kısa etiket (rozet / split band) */
+  categoryLabelEn?: string;
 };
 
 export type PrestigeReelsProps = {
@@ -279,21 +284,32 @@ function MediaSlide({
     toY: kb.toY * kbMul,
   };
 
-  const kbScale = effectiveKb.fromScale + (effectiveKb.toScale - effectiveKb.fromScale) * progress;
-  const kbTx = effectiveKb.fromX + (effectiveKb.toX - effectiveKb.fromX) * progress;
-  const kbTy = effectiveKb.fromY + (effectiveKb.toY - effectiveKb.fromY) * progress;
+  const sceneVariant: SceneVariant = item.sceneVariant ?? "full_bleed";
+  const zoomSlow = sceneVariant === "ken_zoom_slow";
+  const progressKb = zoomSlow ? Math.pow(progress, 0.65) : progress;
+
+  const kbScale = effectiveKb.fromScale + (effectiveKb.toScale - effectiveKb.fromScale) * progressKb;
+  let kbTx = effectiveKb.fromX + (effectiveKb.toX - effectiveKb.fromX) * progressKb;
+  const kbTy = effectiveKb.fromY + (effectiveKb.toY - effectiveKb.fromY) * progressKb;
+  if (sceneVariant === "push_horizontal") {
+    kbTx *= 1.55;
+  }
 
   // ─── Giriş efekti ─────────────────────────────────────────
   const transition = preset.transitions[index % preset.transitions.length];
-  const entryDur = Math.min(18, Math.floor(duration * 0.25));
+  const entryDur = Math.min(22, Math.floor(duration * 0.28));
   const entryP = easeOut(Math.min(1, localFrame / Math.max(1, entryDur)));
 
   let entryScale = 1.0;
   let entryTx = 0;
-  let entryTy = 0;
+  const entryTy = 0;
   let entryBlur = 0;
 
-  if (transition === "zoom-punch") {
+  if (sceneVariant === "slide_entry_left") {
+    entryTx = (1 - entryP) * -78;
+  } else if (sceneVariant === "slide_entry_right") {
+    entryTx = (1 - entryP) * 78;
+  } else if (transition === "zoom-punch") {
     entryScale = 1.06 - 0.06 * entryP;
   } else if (transition === "blur-fade") {
     entryBlur = (1 - entryP) * 14;
@@ -344,6 +360,52 @@ function MediaSlide({
     filter: colorGrade + blurFilter,
   };
 
+  const cat = item.categoryLabelEn?.trim();
+  const washPulse =
+    sceneVariant === "color_wash"
+      ? 0.12 + 0.1 * Math.sin((localFrame / Math.max(12, duration * 0.08)) * Math.PI * 2)
+      : 0;
+
+  const splitBand =
+    sceneVariant === "split_band" && item.type === "image" && Boolean(cat);
+
+  if (splitBand) {
+    return (
+      <AbsoluteFill style={{ opacity, overflow: "hidden", background: "#060608" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "72%", overflow: "hidden" }}>
+          <Img src={item.src} style={mediaStyle} />
+        </div>
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: "28%",
+            background: "linear-gradient(to top, #050508 0%, #0f1018 100%)",
+            display: "flex",
+            alignItems: "center",
+            paddingLeft: 56,
+            paddingRight: 56,
+          }}
+        >
+          <span
+            style={{
+              fontFamily: "system-ui, sans-serif",
+              fontSize: 26,
+              fontWeight: 700,
+              color: "rgba(255,255,255,0.95)",
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
+          >
+            {cat}
+          </span>
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
   return (
     <AbsoluteFill style={{ opacity, overflow: "hidden" }}>
       {item.type === "image" ? (
@@ -357,6 +419,38 @@ function MediaSlide({
           playbackRate={1.0}
           acceptableTimeShiftInSeconds={0.5}
           muted
+        />
+      )}
+      {cat && (
+        <div
+          style={{
+            position: "absolute",
+            top: 40,
+            left: 44,
+            zIndex: 4,
+            padding: "10px 18px",
+            borderRadius: 12,
+            background: "rgba(0,0,0,0.45)",
+            border: "1px solid rgba(255,255,255,0.12)",
+            backdropFilter: "blur(12px)",
+            fontFamily: "system-ui, sans-serif",
+            fontSize: 13,
+            fontWeight: 600,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,0.92)",
+          }}
+        >
+          {cat}
+        </div>
+      )}
+      {sceneVariant === "color_wash" && (
+        <AbsoluteFill
+          style={{
+            pointerEvents: "none",
+            mixBlendMode: "overlay",
+            background: `linear-gradient(115deg, rgba(8,60,90,${washPulse}) 0%, transparent 42%, rgba(90,40,20,${washPulse * 0.85}) 100%)`,
+          }}
         />
       )}
     </AbsoluteFill>
@@ -1020,7 +1114,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   price,
   galleryName,
   ctaPhone,
-  layout = "portrait",
+  layout = "landscape",
   outroFrames = OUTRO_FRAMES,
   reelStyle = "cinematic",
 }) => {

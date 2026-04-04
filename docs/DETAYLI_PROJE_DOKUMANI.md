@@ -15,19 +15,13 @@ konularını “en ince ayrıntısına kadar” açıklamak için hazırlanmış
 
 ## 1) Proje Ne Yapıyor? (Ürün Perspektifi)
 
-Uygulama iki ana yetenek sunuyor:
+Uygulama şu ana yeteneği sunar:
 
-1. **Çoklu görsel (ve/veya video) yükleyip AI ile Reel kurgusu üretmek**
-   - Kullanıcı `/demo` ekranında bir araç galerisinden fotoğraf (JPG/PNG/WEBP) veya kısa video (MP4/MOV/… ) yükler.
-   - Uygulama tarayıcı tarafında medya dosyalarını analiz edilebilir formatlara çevirir (base64 JPEG).
-   - Ardından `/api/analyze` endpoint’i üzerinden Claude (Anthropic) bu kareleri kategorize eder ve en sinematik sırayı önerir.
-   - Önerilen sıraya göre Remotion ile otomatik bir “Prestige” stilinde video timeline’ı oluşturulur ve kullanıcı önizlemeyi tarayıcıda oynatabilir.
-
-2. **Tek bir fotoğraftan AI ile gerçekçi video üretmek**
-   - Kullanıcı `/ai-video` ekranında tek bir araç fotoğrafı yükler ve bir “video stili” seçer.
-   - Tarayıcı fotoğrafı base64’e çevirir, seçilen stile ait prompt ile birlikte `/api/generate-video` endpoint’ine gönderir.
-   - Backend RunwayML Gen-4 Turbo ile üretim başlatır.
-   - Frontend task status’u `taskId` ile periyodik sorgular, hazır olduğunda sonucu videonun URL’inden gösterir ve indirilebilir hale getirir.
+**Çoklu görsel (ve/veya video) yükleyip AI ile Reel kurgusu üretmek**
+- Kullanıcı `/demo` ekranında bir araç galerisinden fotoğraf (JPG/PNG/WEBP) veya kısa video (MP4/MOV/… ) yükler.
+- Uygulama tarayıcı tarafında medya dosyalarını analiz edilebilir formatlara çevirir (base64 JPEG).
+- Ardından `/api/analyze` endpoint’i üzerinden Claude (Anthropic) bu kareleri kategorize eder ve en sinematik sırayı önerir.
+- Önerilen sıraya göre Remotion ile otomatik bir “Prestige” stilinde video timeline’ı oluşturulur ve kullanıcı önizlemeyi tarayıcıda oynatabilir (CLI ile MP4 render mümkün).
 
 ---
 
@@ -43,10 +37,7 @@ Uygulama iki ana yetenek sunuyor:
 **Kullanılan ana route’lar:**
 - `GET /` -> `src/app/page.tsx` (landing)
 - `GET /demo` -> `src/app/demo/page.tsx` (reel kurgulama demo)
-- `GET /ai-video` -> `src/app/ai-video/page.tsx` (tek foto AI video)
 - `POST /api/analyze` -> `src/app/api/analyze/route.ts` (Claude analiz)
-- `POST /api/generate-video` -> `src/app/api/generate-video/route.ts` (Runway görev başlat)
-- `GET /api/generate-video?taskId=...` -> aynı route (Runway görev durumu sorgu)
 
 ### 2.2 Tailwind CSS
 - `src/app/globals.css` içinde `@import "tailwindcss";` kullanımı var.
@@ -78,15 +69,7 @@ Uygulama iki ana yetenek sunuyor:
     - `suggestedOrder`
     - `editingNotes`
 
-### 2.5 RunwayML - Fotoğraftan Video Üretimi
-- `@runwayml/sdk`
-- Model: `gen4_turbo`
-- Amaç:
-  - tek foto + promptText ile video üretimi başlatmak
-  - task status’ünü poll etmek
-  - başarılı olunca `task.output?.[0]` ile videoyu göstermek
-
-### 2.6 Supabase (Şimdilik Kurulu Ama Kullanılmıyor)
+### 2.5 Supabase (Şimdilik Kurulu Ama Kullanılmıyor)
 - `@supabase/ssr` ve `@supabase/supabase-js` package’lerde var.
 - Fakat `src/` içinde `supabase` kullanımını gösteren bir kod bulunmuyor.
 - Doküman: Supabase şu an için “hazır altyapı/gelecek plan” gibi görünüyor.
@@ -99,9 +82,7 @@ Repo içinde en kritik dosyalar:
 - `package.json` : scripts + dependency’ler
 - `src/app/page.tsx` : landing ekranı
 - `src/app/demo/page.tsx` : yükle -> analyze -> preview akışı
-- `src/app/ai-video/page.tsx` : tek foto video üretimi (Runway)
 - `src/app/api/analyze/route.ts` : Claude analiz backend’i
-- `src/app/api/generate-video/route.ts` : Runway video üretimi backend’i
 - `src/lib/frameExtractor.ts` : base64 dönüşümü ve frame çıkarma
 - `src/remotion/PrestigeReels.tsx` : video kompozisyonu (stil, geçişler, outro vs.)
 - `src/remotion/Root.tsx` : Remotion Composition wrapper’ı
@@ -149,9 +130,6 @@ Ek/alternatif Remotion kompozisyon:
   - Claude kullanmak için gerekir
   - `src/app/api/analyze/route.ts` içinde `new Anthropic()` çağrısı yapılır.
   - Anthropic SDK genellikle API key’i env’den okur.
-
-- `RUNWAYML_API_SECRET`
-  - Runway SDK içinde: `new RunwayML({ apiKey: process.env.RUNWAYML_API_SECRET })`
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
@@ -272,39 +250,6 @@ Burada:
 - toplam outro frame
 birleşip Final duration hesaplanır.
 
-### 6.3 `/ai-video` Tek Foto AI Video Üretimi (`src/app/ai-video/page.tsx`)
-
-Bu sayfa daha basit bir akışa sahip:
-
-#### 6.3.1 Stil Seçimi
-`STYLES` dizisi 4 seçenek içeriyor:
-- `studio`
-- `street`
-- `sunset`
-- `speed`
-
-Her stilin içinde iki önemli alan var:
-- `description`
-- `prompt`
-
-#### 6.3.2 Üretim Akışı: `handleGenerate`
-1. Fotoğraf seçilince `imageFile` state’i güncellenir.
-2. `handleGenerate`:
-   - fotoğrafı base64’e çevirir: `imageFileToBase64(imageFile)`
-   - seçilen stil prompt’u alır: `style.prompt`
-   - backend’e POST:
-     - `fetch("/api/generate-video", { body: { imageBase64, prompt } })`
-3. Backend `taskId` döner.
-4. UI `pollStatus(taskId)` ile 3 saniyede bir GET yapar:
-   - `/api/generate-video?taskId=...`
-5. `status`:
-   - `SUCCEEDED`:
-     - `data.videoUrl` set edilir
-     - polling durur
-   - `FAILED`:
-     - error gösterilir
-     - polling durur
-
 ---
 
 ## 7) Backend / API Akışları (Request/Response ve Prompt Mantığı)
@@ -391,61 +336,6 @@ Ekran tarafında `AnalysisResult` ile kullanılır:
 - `analyses: ShotAnalysis[]`
 - `suggestedOrder: number[]`
 - `editingNotes: string`
-
-### 7.2 Runway Video Üretimi: `src/app/api/generate-video/route.ts`
-
-Bu dosya hem POST hem GET sağlar.
-
-#### 7.2.1 POST: Görev Başlat
-Endpoint:
-- `POST /api/generate-video`
-
-Input beklenen JSON:
-- `imageBase64: string`
-- `prompt: string`
-
-Validasyon:
-- eksik parametre -> `400 { error: "Eksik parametre" }`
-
-Runway çağrısı:
-```ts
-client.imageToVideo.create({
-  model: "gen4_turbo",
-  promptImage: `data:image/jpeg;base64,${imageBase64}`,
-  promptText: prompt,
-  duration: 5,
-  ratio: "720:1280",
-});
-```
-
-Önemli parametre anlamı:
-- `promptImage`
-  - base64 JPEG data URL
-- `promptText`
-  - STYLES içindeki prompt metni
-- `duration: 5`
-  - üretilecek video süresi 5 saniye
-- `ratio: "720:1280"`
-  - 9:16 dikey format
-
-Response:
-- `{ taskId: task.id }`
-
-#### 7.2.2 GET: Task Status Polling
-Endpoint:
-- `GET /api/generate-video?taskId=...`
-
-Validasyon:
-- `taskId gerekli` -> `400`
-
-Runway:
-- `client.tasks.retrieve(taskId)`
-
-Çıktı:
-- `status`: `PENDING | RUNNING | SUCCEEDED | FAILED`
-- `progress`: varsa `task.progress` (yoksa 0)
-- `videoUrl`: `SUCCEEDED` ise `task.output?.[0]`
-- `error`: `FAILED` ise `"Üretim başarısız"`
 
 ---
 
@@ -611,7 +501,7 @@ Bu bölüm, `outroFrames` > 0 olduğunda render edilir.
 
 ## 10) Promptlar - Hangileri Kullanılıyor?
 
-Bu proje içinde prompt iki farklı yerde kullanılıyor:
+Bu projede üretim prompt’u **Claude analizi** için kullanılır (`/api/analyze`).
 
 ### 10.1 Claude analiz prompt’u (Claude /api/analyze)
 Bu prompt bölümü bölüm 7.1.3 altında “birebir” verilmiştir.
@@ -622,33 +512,6 @@ Bu prompt bölümü bölüm 7.1.3 altında “birebir” verilmiştir.
 - `is_opener` için “sadece 1 tane true” şartı vardır
 - sıralama kuralı:
   - en güçlü dış cephe -> iç mekan -> detaylar
-
-### 10.2 Runway video stili prompt’ları (STYLES /ai-video)
-`src/app/ai-video/page.tsx` içindeki `STYLES` prompt’ları aşağıdadır.
-
-#### 10.2.1 STYLES.studio
-```text
-Cinematic luxury car reveal in a dark studio, slow 360-degree camera orbit around the vehicle, dramatic rim lighting, high-end automotive photography style, smooth motion, 4K quality
-```
-
-#### 10.2.2 STYLES.street
-```text
-Luxury sports car on a wet city street at night, cinematic camera slowly pushing forward, neon reflections on ground, bokeh city lights in background, dramatic moody atmosphere
-```
-
-#### 10.2.3 STYLES.sunset
-```text
-Luxury car on a coastal cliff road at golden hour sunset, slow cinematic drone-like camera movement, warm golden light reflecting off the paint, stunning sky backdrop
-```
-
-#### 10.2.4 STYLES.speed
-```text
-High-performance sports car, cinematic motion blur effect, low angle camera tracking alongside, sense of raw speed and power, dramatic lighting, adrenaline atmosphere
-```
-
-Bu prompt’lar:
-- tarayıcıdaki style seçimine göre `/api/generate-video` üzerinden Runway’e taşınır
-- Runway promptText olarak kullanır
 
 ---
 
@@ -728,7 +591,7 @@ Bu:
 - **Ken Burns**: Sabit görsel üzerinde zoom/pan animasyonu
 - **Prompt**: AI modeline verilen talimat metni
 - **frame extraction**: Video’dan belirli zaman noktalarına ait görsel kare çıkarma
-- **base64**: Görsel verisini metin olarak kodlama (Claude/Runway’e gönderim için)
+- **base64**: Görsel verisini metin olarak kodlama (Claude’a gönderim için)
 
 ---
 
@@ -765,7 +628,6 @@ Bu bölüm, “dosya bazında” her parçanın sorumluluğunu çok net gösterm
   - Video: `remotion`, `@remotion/player`, `@remotion/cli`
   - AI servisleri:
     - `@anthropic-ai/sdk`
-    - `@runwayml/sdk`
   - Yardımcılar: `lucide-react`, `clsx`
 
 ### 15.2 `src/app/page.tsx`
@@ -785,18 +647,7 @@ Bu bölüm, “dosya bazında” her parçanın sorumluluğunu çok net gösterm
   - Claude önerdiği `suggestedOrder` ile medya sıralama
   - Remotion `Player` ile `PrestigeReels` önizleme
 
-### 15.4 `src/app/ai-video/page.tsx`
-- Tek foto -> Runway video üretimi UI’ı
-- Kritik sorumluluklar:
-  - style prompt seçimi (`STYLES`)
-  - file upload
-  - `imageFileToBase64` ile base64 dönüşümü
-  - `fetch("/api/generate-video")` ile task başlatma
-  - polling:
-    - `setInterval(..., 3000)`
-    - `SUCCEEDED` veya `FAILED` olduğunda durdurma
-
-### 15.5 `src/app/api/analyze/route.ts`
+### 15.4 `src/app/api/analyze/route.ts`
 - Claude’a giden tek backend endpoint
 - Kritik sorumluluklar:
   - input validation
@@ -805,17 +656,11 @@ Bu bölüm, “dosya bazında” her parçanın sorumluluğunu çok net gösterm
   - `claude-opus-4-6` modelini çağırmak
   - response içinden JSON’ı regex ile yakalamak
 
-### 15.6 `src/app/api/generate-video/route.ts`
-- Runway görevi başlatma ve durum sorgulama endpoint’i
-- Kritik sorumluluklar:
-  - Runway SDK ile `imageToVideo.create`
-  - task retrieve ile status/progress/payload parse
-
-### 15.7 `src/lib/frameExtractor.ts`
+### 15.5 `src/lib/frameExtractor.ts`
 - Tarayıcıda base64 dönüşüm + video frame extraction
 - `MAX_PX` ölçekleme kuralı ile payload boyutunu sınırlamaya çalışır
 
-### 15.8 Remotion dosyaları
+### 15.6 Remotion dosyaları
 - `src/remotion/index.tsx`
   - `registerRoot(RemotionRoot)` çağrısı
 - `src/remotion/Root.tsx`
@@ -948,16 +793,6 @@ Bu kombinasyon, Remotion’in beklediği “endAt semantiği” ile tam uyumlu d
 Çözüm fikri:
 - Remotion `<Video />` props’larının frame semantiğini doğrulayıp trim mantığını netleştirmek
 
-### 18.4 Runway task başarılı ama `videoUrl` boş
-Belirtiler:
-- polling `SUCCEEDED` oluyor ama output yok
-
-Kod:
-- `videoUrl: task.status === "SUCCEEDED" ? task.output?.[0] : null`
-
-Çözüm fikri:
-- `task.output` yapısını loglayıp index yerine doğru alanı kullanmak
-
 ---
 
 ## 19) Proje Akış Şeması (Metinle Uçtan Uca)
@@ -980,15 +815,4 @@ Bu bölüm “tek bakışta” anlamak için:
 6. Frontend:
    - `suggestedOrder` ile medya sırasını yeniden dizerek `mediaItems` oluşturur
    - Remotion `Player` ile `PrestigeReels` önizlemesini gösterir
-
-### 19.2 `/ai-video` (Tek foto -> Runway)
-1. Kullanıcı foto yükler
-2. Tarayıcı foto base64 çıkarır
-3. Frontend `/api/generate-video` POST yapar:
-   - `imageBase64` + seçilen stil `prompt`
-4. Backend Runway’de task başlatır:
-   - `model: gen4_turbo`, `duration: 5`, `ratio: 720:1280`
-5. Frontend `taskId` ile polling yapar
-6. `SUCCEEDED` olunca video URL gösterilir ve indirme yapılır
-
 
