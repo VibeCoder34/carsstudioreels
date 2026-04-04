@@ -215,6 +215,478 @@ export const STYLE_PRESETS: Record<ReelStyle, StylePreset> = {
   },
 };
 
+/* ─── Floating spec card overlay (floating_card varyantı) ── */
+
+function FloatingSpecCard({
+  localFrame,
+  carBrand,
+  carModel,
+  year,
+  price,
+}: {
+  localFrame: number;
+  carBrand: string;
+  carModel: string;
+  year: string;
+  price: string;
+}) {
+  const slideX = interpolate(localFrame, [12, 38], [80, 0], { extrapolateRight: "clamp" });
+  const cardOpacity = interpolate(localFrame, [12, 38], [0, 1], { extrapolateRight: "clamp" });
+
+  const rows = [
+    { label: "MARKA", value: carBrand, highlight: false },
+    { label: "MODEL", value: carModel, highlight: false },
+    { label: "YIL", value: year, highlight: false },
+    { label: "FİYAT", value: price, highlight: true },
+  ];
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        right: 52,
+        bottom: 130,
+        opacity: cardOpacity,
+        transform: `translateX(${slideX}px)`,
+        background: "rgba(4,4,8,0.76)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
+        border: "1px solid rgba(248,201,106,0.22)",
+        borderRadius: 20,
+        padding: "28px 36px",
+        minWidth: 260,
+      }}
+    >
+      {rows.map((row, i) => {
+        const rowDelay = 28 + i * 12;
+        const rowOpacity = interpolate(localFrame, [rowDelay, rowDelay + 16], [0, 1], { extrapolateRight: "clamp" });
+        const rowY = interpolate(localFrame, [rowDelay, rowDelay + 16], [14, 0], { extrapolateRight: "clamp" });
+        return (
+          <div
+            key={row.label}
+            style={{
+              opacity: rowOpacity,
+              transform: `translateY(${rowY}px)`,
+              marginBottom: i < rows.length - 1 ? 18 : 0,
+            }}
+          >
+            <div
+              style={{
+                fontFamily: "sans-serif",
+                fontSize: 10,
+                letterSpacing: "0.14em",
+                color: "rgba(255,255,255,0.36)",
+                textTransform: "uppercase",
+                marginBottom: 3,
+              }}
+            >
+              {row.label}
+            </div>
+            <div
+              style={{
+                fontFamily: "sans-serif",
+                fontSize: row.highlight ? 30 : 18,
+                fontWeight: row.highlight ? 700 : 500,
+                color: row.highlight ? "#f8c96a" : "rgba(255,255,255,0.9)",
+                letterSpacing: "0.5px",
+                textShadow: row.highlight ? "0 0 24px rgba(248,201,106,0.4)" : "none",
+              }}
+            >
+              {row.value}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Callout annotation overlay (callout varyantı) ─────── */
+
+function CalloutAnnotation({ localFrame, label }: { localFrame: number; label: string }) {
+  const lineW = interpolate(localFrame, [14, 42], [0, 130], { extrapolateRight: "clamp" });
+  const bubbleOpacity = interpolate(localFrame, [40, 58], [0, 1], { extrapolateRight: "clamp" });
+  const bubbleScale = interpolate(localFrame, [40, 58], [0.72, 1], { extrapolateRight: "clamp" });
+  const dotPulse = 0.68 + 0.32 * Math.sin((localFrame / 11) * Math.PI);
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: "37%",
+        left: "50%",
+        transform: "translate(-50%, -50%)",
+        display: "flex",
+        alignItems: "center",
+        pointerEvents: "none",
+      }}
+    >
+      {/* Pulsing dot */}
+      <div style={{ position: "relative", width: 22, height: 22, flexShrink: 0 }}>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: "50%",
+            background: "rgba(248,201,106,0.28)",
+            transform: `scale(${dotPulse * 2.2})`,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 5,
+            borderRadius: "50%",
+            background: "#f8c96a",
+            boxShadow: "0 0 18px rgba(248,201,106,0.85)",
+          }}
+        />
+      </div>
+
+      {/* Connecting line */}
+      <div
+        style={{
+          width: lineW,
+          height: 1.5,
+          background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.35))",
+          flexShrink: 0,
+        }}
+      />
+
+      {/* Label bubble */}
+      <div
+        style={{
+          opacity: bubbleOpacity,
+          transform: `scale(${bubbleScale})`,
+          transformOrigin: "left center",
+          background: "rgba(4,4,8,0.80)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          border: "1px solid rgba(248,201,106,0.28)",
+          borderRadius: 12,
+          padding: "12px 22px",
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "sans-serif",
+            fontSize: 16,
+            fontWeight: 600,
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "rgba(255,255,255,0.94)",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Spec table overlay (spec_table varyantı) ──────────── */
+
+type SpecCategory = "engine" | "cockpit" | "wheel" | "dimensions";
+
+interface SpecRow {
+  label: string;
+  value: string;
+  barPct?: number; // 0–1 arası → animasyonlu bar render eder
+}
+
+const SPEC_DATA: Record<SpecCategory, { title: string; rows: SpecRow[] }> = {
+  engine: {
+    title: "MOTOR PERFORMANSI",
+    rows: [
+      { label: "Motor",        value: "2.0L TwinPower Turbo" },
+      { label: "Güç",          value: "190 HP",      barPct: 0.72 },
+      { label: "Tork",         value: "400 Nm",      barPct: 0.80 },
+      { label: "0–100 km/s",   value: "7.2 sn",      barPct: 0.56 },
+      { label: "Azami Hız",    value: "235 km/h",    barPct: 0.78 },
+    ],
+  },
+  cockpit: {
+    title: "İÇ MEKAN ÖZELLİKLERİ",
+    rows: [
+      { label: "Panoramik Cam Tavan",              value: "✓" },
+      { label: "Isıtmalı & Havalandırmalı Koltuk", value: "✓" },
+      { label: "12.3\" Dijital Gösterge Paneli",   value: "✓" },
+      { label: "Harman Kardon Ses Sistemi",         value: "✓" },
+      { label: "Ambient Aydınlatma (16 Renk)",      value: "✓" },
+      { label: "Kablosuz Şarj",                    value: "✓" },
+    ],
+  },
+  wheel: {
+    title: "JANT & FREN SİSTEMİ",
+    rows: [
+      { label: "Lastik Ölçüsü",   value: "245/45 R19" },
+      { label: "Jant",            value: "19\" Çift Kollu" },
+      { label: "Ön Fren Çapı",    value: "348 mm",  barPct: 0.82 },
+      { label: "Arka Fren Çapı",  value: "300 mm",  barPct: 0.70 },
+      { label: "Fren Tipi",       value: "Ventilasyonlu Disk" },
+    ],
+  },
+  dimensions: {
+    title: "BOYUTLAR & HACİM",
+    rows: [
+      { label: "Uzunluk",         value: "4.963 mm", barPct: 0.82 },
+      { label: "Genişlik",        value: "1.868 mm", barPct: 0.68 },
+      { label: "Yükseklik",       value: "1.467 mm", barPct: 0.55 },
+      { label: "Dingil Mesafesi", value: "2.975 mm", barPct: 0.75 },
+      { label: "Bagaj Hacmi",     value: "520 L",    barPct: 0.60 },
+    ],
+  },
+};
+
+function detectSpecCategory(categoryLabelEn: string): SpecCategory {
+  const l = categoryLabelEn.toLowerCase();
+  if (l.includes("engine") || l.includes("motor") || l.includes("hood") || l.includes("bonnet")) return "engine";
+  if (l.includes("cockpit") || l.includes("interior") || l.includes("cabin") || l.includes("dashboard") || l.includes("seat") || l.includes("steering")) return "cockpit";
+  if (l.includes("tire") || l.includes("wheel") || l.includes("rim") || l.includes("brake") || l.includes("tyre")) return "wheel";
+  return "dimensions";
+}
+
+function SpecTableOverlay({
+  localFrame,
+  categoryLabelEn,
+}: {
+  localFrame: number;
+  categoryLabelEn: string;
+}) {
+  const category = detectSpecCategory(categoryLabelEn);
+  const { title, rows } = SPEC_DATA[category];
+  const isChecklist = category === "cockpit";
+
+  const panelY = interpolate(localFrame, [0, 24], [280, 0], {
+    extrapolateRight: "clamp",
+    easing: easeOut,
+  });
+  const panelOpacity = interpolate(localFrame, [0, 20], [0, 1], { extrapolateRight: "clamp" });
+
+  const titleOpacity = interpolate(localFrame, [20, 36], [0, 1], { extrapolateRight: "clamp" });
+  const titleX     = interpolate(localFrame, [20, 36], [-28, 0], { extrapolateRight: "clamp" });
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 0, right: 0, bottom: 0,
+        height: "50%",
+        opacity: panelOpacity,
+        transform: `translateY(${panelY}px)`,
+      }}
+    >
+      {/* Yarı-şeffaf koyu panel + üst fade */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(to bottom, transparent 0%, rgba(4,4,8,0.92) 16%, rgba(4,4,8,0.97) 100%)",
+        }}
+      />
+
+      {/* İçerik */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          padding: "22px 96px 36px",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        {/* Başlık + altın şerit */}
+        <div
+          style={{
+            opacity: titleOpacity,
+            transform: `translateX(${titleX}px)`,
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            marginBottom: 18,
+          }}
+        >
+          <div
+            style={{
+              width: 3, height: 24,
+              background: "#f8c96a",
+              borderRadius: 2,
+              boxShadow: "0 0 14px rgba(248,201,106,0.65)",
+            }}
+          />
+          <span
+            style={{
+              fontFamily: "sans-serif",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.20em",
+              color: "rgba(255,255,255,0.48)",
+              textTransform: "uppercase",
+            }}
+          >
+            {title}
+          </span>
+        </div>
+
+        {/* Satırlar */}
+        <div
+          style={{
+            display: isChecklist ? "grid" : "flex",
+            gridTemplateColumns: isChecklist ? "1fr 1fr 1fr" : undefined,
+            flexDirection: isChecklist ? undefined : "column",
+            gap: isChecklist ? "12px 40px" : 0,
+            flex: 1,
+          }}
+        >
+          {rows.map((row, ri) => {
+            const delay = 32 + ri * 10;
+            const rowOpacity = interpolate(localFrame, [delay, delay + 18], [0, 1], { extrapolateRight: "clamp" });
+            const rowX      = interpolate(localFrame, [delay, delay + 18], [22, 0], { extrapolateRight: "clamp" });
+
+            if (isChecklist) {
+              const checkScale = interpolate(localFrame, [delay, delay + 14], [0, 1], { extrapolateRight: "clamp" });
+              return (
+                <div
+                  key={ri}
+                  style={{
+                    opacity: rowOpacity,
+                    transform: `translateX(${rowX}px)`,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 18, height: 18,
+                      borderRadius: "50%",
+                      background: "rgba(248,201,106,0.12)",
+                      border: "1.5px solid #f8c96a",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      transform: `scale(${checkScale})`,
+                    }}
+                  >
+                    <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                      <path d="M1.5 5L4 7.5L8.5 2.5" stroke="#f8c96a" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <span
+                    style={{
+                      fontFamily: "sans-serif",
+                      fontSize: 13,
+                      fontWeight: 400,
+                      color: "rgba(255,255,255,0.80)",
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    {row.label}
+                  </span>
+                </div>
+              );
+            }
+
+            // Tablo satırı (label | bar animasyonu | değer)
+            const barWidth =
+              row.barPct !== undefined
+                ? interpolate(localFrame, [delay + 10, delay + 36], [0, row.barPct * 100], {
+                    extrapolateRight: "clamp",
+                  })
+                : 0;
+
+            return (
+              <div
+                key={ri}
+                style={{
+                  opacity: rowOpacity,
+                  transform: `translateX(${rowX}px)`,
+                  display: "flex",
+                  alignItems: "center",
+                  paddingTop: 10,
+                  paddingBottom: 10,
+                  borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  gap: 16,
+                }}
+              >
+                {/* Etiket */}
+                <span
+                  style={{
+                    fontFamily: "sans-serif",
+                    fontSize: 11,
+                    fontWeight: 400,
+                    color: "rgba(255,255,255,0.34)",
+                    letterSpacing: "0.10em",
+                    textTransform: "uppercase",
+                    width: 148,
+                    flexShrink: 0,
+                  }}
+                >
+                  {row.label}
+                </span>
+
+                {/* Animasyonlu bar + değer */}
+                {row.barPct !== undefined ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, flex: 1 }}>
+                    <div
+                      style={{
+                        flex: 1,
+                        height: 3,
+                        background: "rgba(255,255,255,0.07)",
+                        borderRadius: 2,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${barWidth}%`,
+                          background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.55))",
+                          borderRadius: 2,
+                          boxShadow: "0 0 8px rgba(248,201,106,0.38)",
+                        }}
+                      />
+                    </div>
+                    <span
+                      style={{
+                        fontFamily: "sans-serif",
+                        fontSize: 15,
+                        fontWeight: 600,
+                        color: "rgba(255,255,255,0.92)",
+                        letterSpacing: "0.04em",
+                        minWidth: 130,
+                        textAlign: "right",
+                      }}
+                    >
+                      {row.value}
+                    </span>
+                  </div>
+                ) : (
+                  <span
+                    style={{
+                      fontFamily: "sans-serif",
+                      fontSize: 15,
+                      fontWeight: 600,
+                      color: "rgba(255,255,255,0.92)",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    {row.value}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Tek bir medya slaydı ───────────────────────────────── */
 
 function MediaSlide({
@@ -222,11 +694,19 @@ function MediaSlide({
   index,
   items,
   preset,
+  carBrand,
+  carModel,
+  year,
+  price,
 }: {
   item: MediaItem;
   index: number;
   items: MediaItem[];
   preset: StylePreset;
+  carBrand: string;
+  carModel: string;
+  year: string;
+  price: string;
 }) {
   const frame = useCurrentFrame();
   const startFrame = getItemStartFrame(items, index, preset.crossfadeFrames);
@@ -406,6 +886,590 @@ function MediaSlide({
     );
   }
 
+  // ─── split_specs: Sol görsel + sağ spec paneli ────────────
+  if (sceneVariant === "split_specs") {
+    const specs = [
+      { label: "MARKA", value: carBrand, highlight: false },
+      { label: "MODEL", value: carModel, highlight: false },
+      { label: "YIL", value: year, highlight: false },
+      { label: "FİYAT", value: price, highlight: true },
+    ];
+
+    return (
+      <AbsoluteFill style={{ opacity, overflow: "hidden", background: "#040406" }}>
+        {/* Sol: araç görseli */}
+        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: "58%", overflow: "hidden" }}>
+          <Img
+            src={item.src}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              transform: `scale(${finalScale}) translate(${finalTx}px, ${finalTy}px)`,
+              filter: colorGrade,
+            }}
+          />
+          {/* Sağa eriyen geçiş */}
+          <div
+            style={{
+              position: "absolute",
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: 180,
+              background: "linear-gradient(to right, transparent, #040406)",
+              pointerEvents: "none",
+            }}
+          />
+        </div>
+
+        {/* Sağ: spesifikasyon paneli */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: "44%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            padding: "0 72px",
+          }}
+        >
+          {/* Dekoratif çizgi */}
+          {(() => {
+            const lineW = interpolate(localFrame, [6, 26], [0, 48], { extrapolateRight: "clamp" });
+            return (
+              <div
+                style={{
+                  width: lineW,
+                  height: 2,
+                  background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.15))",
+                  marginBottom: 44,
+                }}
+              />
+            );
+          })()}
+
+          {specs.map((spec, si) => {
+            const delay = 10 + si * 14;
+            const rowOpacity = interpolate(localFrame, [delay, delay + 20], [0, 1], { extrapolateRight: "clamp" });
+            const rowX = interpolate(localFrame, [delay, delay + 20], [36, 0], { extrapolateRight: "clamp" });
+            return (
+              <div
+                key={spec.label}
+                style={{ opacity: rowOpacity, transform: `translateX(${rowX}px)` }}
+              >
+                <div
+                  style={{
+                    fontFamily: "sans-serif",
+                    fontSize: 11,
+                    letterSpacing: "0.16em",
+                    color: "rgba(255,255,255,0.32)",
+                    textTransform: "uppercase",
+                    marginBottom: 8,
+                  }}
+                >
+                  {spec.label}
+                </div>
+                <div
+                  style={{
+                    fontFamily: "sans-serif",
+                    fontSize: spec.highlight ? 48 : 30,
+                    fontWeight: spec.highlight ? 700 : 600,
+                    color: spec.highlight ? "#f8c96a" : "rgba(255,255,255,0.92)",
+                    letterSpacing: spec.highlight ? "1px" : "0.5px",
+                    textShadow: spec.highlight
+                      ? "0 0 32px rgba(248,201,106,0.42)"
+                      : "none",
+                    lineHeight: 1.1,
+                  }}
+                >
+                  {spec.value}
+                </div>
+                {si < specs.length - 1 && (
+                  <div
+                    style={{
+                      marginTop: 22,
+                      marginBottom: 22,
+                      height: 1,
+                      background: "rgba(255,255,255,0.07)",
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── side_table: Sol foto + sağ kategori tablosu ─────────
+  if (sceneVariant === "side_table") {
+    const category = detectSpecCategory(cat ?? "exterior");
+    const { title, rows } = SPEC_DATA[category];
+    const isChecklist = category === "cockpit";
+
+    const lineW    = interpolate(localFrame, [6, 26], [0, 48], { extrapolateRight: "clamp" });
+    const titleOp  = interpolate(localFrame, [22, 38], [0, 1],  { extrapolateRight: "clamp" });
+    const titleX   = interpolate(localFrame, [22, 38], [-28, 0], { extrapolateRight: "clamp" });
+
+    return (
+      <AbsoluteFill style={{ opacity, overflow: "hidden", background: "#040406" }}>
+        {/* Sol: araç görseli */}
+        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: "55%", overflow: "hidden" }}>
+          <Img
+            src={item.src}
+            style={{
+              width: "100%", height: "100%", objectFit: "cover",
+              transform: `scale(${finalScale}) translate(${finalTx}px, ${finalTy}px)`,
+              filter: colorGrade,
+            }}
+          />
+          {/* Sağa eriyen geçiş */}
+          <div style={{
+            position: "absolute", top: 0, right: 0, bottom: 0, width: 170,
+            background: "linear-gradient(to right, transparent, #040406)",
+            pointerEvents: "none",
+          }} />
+        </div>
+
+        {/* Sağ: tablo paneli */}
+        <div style={{
+          position: "absolute", top: 0, right: 0, bottom: 0, width: "47%",
+          display: "flex", flexDirection: "column", justifyContent: "center",
+          padding: "0 68px",
+        }}>
+          {/* Dekoratif çizgi + başlık */}
+          <div style={{ width: lineW, height: 2, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.12))", marginBottom: 22 }} />
+          <div style={{ opacity: titleOp, transform: `translateX(${titleX}px)`, display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
+            <div style={{ width: 3, height: 22, background: "#f8c96a", borderRadius: 2, boxShadow: "0 0 14px rgba(248,201,106,0.6)" }} />
+            <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.20em", color: "rgba(255,255,255,0.42)", textTransform: "uppercase" }}>
+              {title}
+            </span>
+          </div>
+
+          {/* Satırlar */}
+          {isChecklist ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {rows.map((row, ri) => {
+                const delay = 32 + ri * 12;
+                const rOp    = interpolate(localFrame, [delay, delay + 18], [0, 1], { extrapolateRight: "clamp" });
+                const rX     = interpolate(localFrame, [delay, delay + 18], [28, 0], { extrapolateRight: "clamp" });
+                const chkS   = interpolate(localFrame, [delay, delay + 14], [0, 1], { extrapolateRight: "clamp" });
+                return (
+                  <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(248,201,106,0.10)", border: "1.5px solid #f8c96a", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transform: `scale(${chkS})` }}>
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                        <path d="M1.5 5L4 7.5L8.5 2.5" stroke="#f8c96a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    <span style={{ fontFamily: "sans-serif", fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.82)", letterSpacing: "0.01em" }}>
+                      {row.label}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {rows.map((row, ri) => {
+                const delay = 32 + ri * 13;
+                const rOp  = interpolate(localFrame, [delay, delay + 18], [0, 1], { extrapolateRight: "clamp" });
+                const rX   = interpolate(localFrame, [delay, delay + 18], [28, 0], { extrapolateRight: "clamp" });
+                const barW = row.barPct !== undefined
+                  ? interpolate(localFrame, [delay + 12, delay + 40], [0, row.barPct * 100], { extrapolateRight: "clamp" })
+                  : 0;
+                return (
+                  <div key={ri} style={{
+                    opacity: rOp, transform: `translateX(${rX}px)`,
+                    paddingTop: 13, paddingBottom: 13,
+                    borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
+                  }}>
+                    <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.14em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 8 }}>
+                      {row.label}
+                    </div>
+                    {row.barPct !== undefined ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${barW}%`, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.50))", borderRadius: 2, boxShadow: "0 0 8px rgba(248,201,106,0.36)" }} />
+                        </div>
+                        <span style={{ fontFamily: "sans-serif", fontSize: 17, fontWeight: 700, color: "rgba(255,255,255,0.92)", minWidth: 110, textAlign: "right" }}>
+                          {row.value}
+                        </span>
+                      </div>
+                    ) : (
+                      <span style={{ fontFamily: "sans-serif", fontSize: 17, fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>
+                        {row.value}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── card_panel: Yuvarlak köşeli foto kartı + veri paneli ──
+  if (sceneVariant === "card_panel") {
+    const category = detectSpecCategory(cat ?? "exterior");
+    const { title, rows } = SPEC_DATA[category];
+    const isChecklist = category === "cockpit";
+
+    const cardScale = interpolate(localFrame, [0, 24], [0.95, 1.0], { extrapolateRight: "clamp", easing: easeOut });
+    const cardOp    = interpolate(localFrame, [0, 18], [0, 1], { extrapolateRight: "clamp" });
+    const lineW     = interpolate(localFrame, [12, 34], [0, 48], { extrapolateRight: "clamp" });
+    const titleOp   = interpolate(localFrame, [28, 46], [0, 1], { extrapolateRight: "clamp" });
+    const titleX    = interpolate(localFrame, [28, 46], [-24, 0], { extrapolateRight: "clamp" });
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#07070d" }}>
+        {/* Arka plan yumuşak glow */}
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 28% 50%, rgba(8,22,44,0.88) 0%, transparent 64%)", pointerEvents: "none" }} />
+
+        {/* Foto kartı — sol, paddingli, yuvarlak köşe */}
+        <div style={{
+          position: "absolute",
+          top: 56, bottom: 56, left: 56,
+          width: "50%",
+          borderRadius: 18,
+          overflow: "hidden",
+          opacity: cardOp,
+          transform: `scale(${cardScale})`,
+          transformOrigin: "left center",
+          boxShadow: "0 28px 90px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.04)",
+        }}>
+          <Img src={item.src} style={{
+            width: "100%", height: "100%", objectFit: "cover",
+            transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`,
+            filter: colorGrade,
+          }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.4) 0%, transparent 45%)", pointerEvents: "none" }} />
+        </div>
+
+        {/* Veri paneli — sağ */}
+        <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: "55%", display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 72px 0 44px" }}>
+          <div style={{ width: lineW, height: 2, background: "#f8c96a", borderRadius: 1, marginBottom: 24, boxShadow: "0 0 14px rgba(248,201,106,0.55)" }} />
+          <div style={{ opacity: titleOp, transform: `translateX(${titleX}px)`, marginBottom: 32 }}>
+            <span style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase" }}>{title}</span>
+          </div>
+
+          {isChecklist ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+              {rows.map((row, ri) => {
+                const d = 38 + ri * 13;
+                const rOp = interpolate(localFrame, [d, d + 18], [0, 1], { extrapolateRight: "clamp" });
+                const rX  = interpolate(localFrame, [d, d + 18], [26, 0], { extrapolateRight: "clamp" });
+                const ckS = interpolate(localFrame, [d, d + 14], [0, 1], { extrapolateRight: "clamp" });
+                return (
+                  <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, display: "flex", alignItems: "center", gap: 14 }}>
+                    <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(248,201,106,0.08)", border: "1.5px solid rgba(248,201,106,0.65)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transform: `scale(${ckS})` }}>
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5L4 7.5L8.5 2.5" stroke="#f8c96a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </div>
+                    <span style={{ fontFamily: "sans-serif", fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.80)" }}>{row.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              {rows.map((row, ri) => {
+                const d  = 38 + ri * 13;
+                const rOp = interpolate(localFrame, [d, d + 18], [0, 1], { extrapolateRight: "clamp" });
+                const rX  = interpolate(localFrame, [d, d + 18], [26, 0], { extrapolateRight: "clamp" });
+                const bW  = row.barPct !== undefined
+                  ? interpolate(localFrame, [d + 14, d + 44], [0, row.barPct * 100], { extrapolateRight: "clamp" })
+                  : 0;
+                return (
+                  <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, paddingTop: 12, paddingBottom: 12, borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}>
+                    <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.14em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 8 }}>{row.label}</div>
+                    {row.barPct !== undefined ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                        <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
+                          <div style={{ height: "100%", width: `${bW}%`, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.48))", borderRadius: 2, boxShadow: "0 0 8px rgba(248,201,106,0.35)" }} />
+                        </div>
+                        <span style={{ fontFamily: "sans-serif", fontSize: 18, fontWeight: 700, color: "#ffffff", minWidth: 108, textAlign: "right" }}>{row.value}</span>
+                      </div>
+                    ) : (
+                      <span style={{ fontFamily: "sans-serif", fontSize: 18, fontWeight: 700, color: "#ffffff" }}>{row.value}</span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── letter_box: Sinemaskop çerçeve + markalı barlar ──────
+  if (sceneVariant === "letter_box") {
+    const barEnter = interpolate(localFrame, [0, 24], [72, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const barOp    = interpolate(localFrame, [0, 18], [0, 1], { extrapolateRight: "clamp" });
+
+    const bottomStats = [
+      { label: "MARKA",  value: carBrand },
+      { label: "MODEL",  value: carModel },
+      { label: "YIL",    value: year     },
+      { label: "FİYAT",  value: price    },
+    ];
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#040408" }}>
+        {/* Orta: fotoğraf — tam genişlik, %66 yükseklik, köşe yok */}
+        <div style={{ position: "absolute", top: "17%", left: 0, right: 0, height: "66%", overflow: "hidden" }}>
+          <Img src={item.src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, filter: colorGrade }} />
+        </div>
+
+        {/* Üst bar */}
+        <div style={{
+          position: "absolute", top: 0, left: 0, right: 0, height: "17%",
+          background: "#040408",
+          opacity: barOp,
+          transform: `translateY(${-barEnter}px)`,
+          display: "flex", alignItems: "center",
+          padding: "0 88px",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+        }}>
+          <span style={{ fontFamily: "sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.22em", color: "#f8c96a", textTransform: "uppercase" }}>
+            {cat ?? carBrand}
+          </span>
+          <div style={{ marginLeft: 28, flex: 1, height: 1, background: "linear-gradient(to right, rgba(248,201,106,0.28), transparent)" }} />
+          <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 300, letterSpacing: "0.14em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase" }}>
+            {carBrand} · {year}
+          </span>
+        </div>
+
+        {/* Alt bar: specs */}
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0, height: "17%",
+          background: "#040408",
+          opacity: barOp,
+          transform: `translateY(${barEnter}px)`,
+          display: "flex", alignItems: "center",
+          padding: "0 88px",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+        }}>
+          {bottomStats.map((stat, si) => {
+            const d  = 24 + si * 10;
+            const sOp = interpolate(localFrame, [d, d + 18], [0, 1], { extrapolateRight: "clamp" });
+            const sY  = interpolate(localFrame, [d, d + 18], [12, 0], { extrapolateRight: "clamp" });
+            return (
+              <div key={si} style={{ display: "flex", alignItems: "center" }}>
+                {si > 0 && <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.08)", margin: "0 40px" }} />}
+                <div style={{ opacity: sOp, transform: `translateY(${sY}px)` }}>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.18em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 6 }}>{stat.label}</div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: si === 3 ? 22 : 17, fontWeight: si === 3 ? 700 : 500, color: si === 3 ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: "0.02em" }}>{stat.value}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── feature_hero: Büyük foto kartı + dev performans rakamları
+  if (sceneVariant === "feature_hero") {
+    const cardOp = interpolate(localFrame, [0, 20], [0, 1], { extrapolateRight: "clamp" });
+    const cardY  = interpolate(localFrame, [0, 28], [30, 0], { extrapolateRight: "clamp", easing: easeOut });
+
+    const perfStats = [
+      { value: "190 HP", label: "Motor Gücü" },
+      { value: "400 Nm", label: "Tork"       },
+      { value: "7.2 sn", label: "0–100 km/s" },
+    ];
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#07070d" }}>
+        {/* Arka glow */}
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 50% 36%, rgba(12,24,52,0.92) 0%, transparent 68%)", pointerEvents: "none" }} />
+
+        {/* Büyük foto kartı */}
+        <div style={{
+          position: "absolute",
+          top: 52, left: 80, right: 80,
+          height: "60%",
+          borderRadius: 20,
+          overflow: "hidden",
+          opacity: cardOp,
+          transform: `translateY(${cardY}px)`,
+          boxShadow: "0 36px 110px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.05)",
+        }}>
+          <Img src={item.src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.3) 0%, transparent 50%)", pointerEvents: "none" }} />
+        </div>
+
+        {/* Alt: 3 büyük performans rakamı */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "34%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {perfStats.map((stat, si) => {
+            const d  = 34 + si * 18;
+            const sOp = interpolate(localFrame, [d, d + 22], [0, 1], { extrapolateRight: "clamp" });
+            const sY  = interpolate(localFrame, [d, d + 22], [24, 0], { extrapolateRight: "clamp", easing: easeOut });
+            return (
+              <div key={si} style={{ display: "flex", alignItems: "stretch" }}>
+                {si > 0 && <div style={{ width: 1, background: "rgba(255,255,255,0.07)", margin: "18px 64px" }} />}
+                <div style={{ opacity: sOp, transform: `translateY(${sY}px)`, textAlign: "center", minWidth: 150 }}>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 56, fontWeight: 800, color: "#f8c96a", letterSpacing: "-1px", lineHeight: 1, textShadow: "0 0 48px rgba(248,201,106,0.38)" }}>
+                    {stat.value}
+                  </div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.15em", color: "rgba(255,255,255,0.32)", textTransform: "uppercase", marginTop: 12 }}>
+                    {stat.label}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── duo_split: İki foto kartı yan yana ──────────────────
+  if (sceneVariant === "duo_split") {
+    const right = items[index + 1] ?? items[Math.max(0, index - 1)];
+
+    const leftOp  = interpolate(localFrame, [0, 22], [0, 1], { extrapolateRight: "clamp" });
+    const leftX   = interpolate(localFrame, [0, 22], [-50, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const rightOp = interpolate(localFrame, [12, 34], [0, 1], { extrapolateRight: "clamp" });
+    const rightX  = interpolate(localFrame, [12, 34], [50, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const divH    = interpolate(localFrame, [22, 42], [0, 100], { extrapolateRight: "clamp" });
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#07070d" }}>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 50% 50%, rgba(10,20,40,0.7) 0%, transparent 70%)", pointerEvents: "none" }} />
+
+        {/* Sol foto kartı */}
+        <div style={{
+          position: "absolute",
+          top: 48, bottom: 48, left: 48,
+          width: "calc(50% - 60px)",
+          borderRadius: 16, overflow: "hidden",
+          opacity: leftOp, transform: `translateX(${leftX}px)`,
+          boxShadow: "0 22px 70px rgba(0,0,0,0.68)",
+        }}>
+          <Img src={item.src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
+          {cat && (
+            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.16em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
+              {cat}
+            </div>
+          )}
+        </div>
+
+        {/* Orta ayraç */}
+        <div style={{
+          position: "absolute", left: "50%", top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 1, height: `${divH}%`,
+          background: "linear-gradient(to bottom, transparent, rgba(248,201,106,0.35) 25%, rgba(248,201,106,0.35) 75%, transparent)",
+        }} />
+
+        {/* Sağ foto kartı */}
+        <div style={{
+          position: "absolute",
+          top: 48, bottom: 48, right: 48,
+          width: "calc(50% - 60px)",
+          borderRadius: 16, overflow: "hidden",
+          opacity: rightOp, transform: `translateX(${rightX}px)`,
+          boxShadow: "0 22px 70px rgba(0,0,0,0.68)",
+        }}>
+          <Img src={right.src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
+          {right.categoryLabelEn && (
+            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.16em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
+              {right.categoryLabelEn}
+            </div>
+          )}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── trio_mosaic: 1 büyük + 2 küçük foto kompozisyonu ────
+  if (sceneVariant === "trio_mosaic") {
+    const b = items[index + 1] ?? items[Math.max(0, index - 1)];
+    const c = items[index + 2] ?? items[Math.max(0, index - 2)] ?? b;
+
+    const mainOp  = interpolate(localFrame, [0, 24], [0, 1], { extrapolateRight: "clamp" });
+    const mainS   = interpolate(localFrame, [0, 24], [0.95, 1], { extrapolateRight: "clamp", easing: easeOut });
+    const topOp   = interpolate(localFrame, [14, 34], [0, 1], { extrapolateRight: "clamp" });
+    const topX    = interpolate(localFrame, [14, 34], [36, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const botOp   = interpolate(localFrame, [26, 46], [0, 1], { extrapolateRight: "clamp" });
+    const botX    = interpolate(localFrame, [26, 46], [36, 0], { extrapolateRight: "clamp", easing: easeOut });
+
+    // Sağ panel genişliği %37, aralarında 12px gap
+    const rightW = "calc(37% - 48px)";
+    const rightH = "calc(50% - 54px)"; // (frame - 2*48 - 12) / 2
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#06060c" }}>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 32% 50%, rgba(8,18,38,0.92) 0%, transparent 65%)", pointerEvents: "none" }} />
+
+        {/* Ana büyük foto — sol */}
+        <div style={{
+          position: "absolute",
+          top: 48, bottom: 48, left: 48,
+          right: "calc(37% + 12px)",
+          borderRadius: 16, overflow: "hidden",
+          opacity: mainOp, transform: `scale(${mainS})`,
+          transformOrigin: "left center",
+          boxShadow: "0 26px 80px rgba(0,0,0,0.72)",
+        }}>
+          <Img src={item.src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.5) 0%, transparent 45%)", pointerEvents: "none" }} />
+          {cat && (
+            <div style={{ position: "absolute", bottom: 20, left: 22, fontFamily: "sans-serif", fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase" }}>
+              {cat}
+            </div>
+          )}
+        </div>
+
+        {/* Sağ üst küçük foto */}
+        <div style={{
+          position: "absolute",
+          top: 48, right: 48,
+          width: rightW, height: rightH,
+          borderRadius: 14, overflow: "hidden",
+          opacity: topOp, transform: `translateX(${topX}px)`,
+          boxShadow: "0 16px 50px rgba(0,0,0,0.62)",
+        }}>
+          <Img src={b.src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
+          {b.categoryLabelEn && (
+            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
+              {b.categoryLabelEn}
+            </div>
+          )}
+        </div>
+
+        {/* Sağ alt küçük foto */}
+        <div style={{
+          position: "absolute",
+          bottom: 48, right: 48,
+          width: rightW, height: rightH,
+          borderRadius: 14, overflow: "hidden",
+          opacity: botOp, transform: `translateX(${botX}px)`,
+          boxShadow: "0 16px 50px rgba(0,0,0,0.62)",
+        }}>
+          <Img src={c.src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
+          {c.categoryLabelEn && (
+            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
+              {c.categoryLabelEn}
+            </div>
+          )}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
   return (
     <AbsoluteFill style={{ opacity, overflow: "hidden" }}>
       {item.type === "image" ? (
@@ -451,6 +1515,30 @@ function MediaSlide({
             mixBlendMode: "overlay",
             background: `linear-gradient(115deg, rgba(8,60,90,${washPulse}) 0%, transparent 42%, rgba(90,40,20,${washPulse * 0.85}) 100%)`,
           }}
+        />
+      )}
+
+      {/* floating_card: glassmorphism spec kart */}
+      {sceneVariant === "floating_card" && (
+        <FloatingSpecCard
+          localFrame={localFrame}
+          carBrand={carBrand}
+          carModel={carModel}
+          year={year}
+          price={price}
+        />
+      )}
+
+      {/* callout: pulsing dot + çizgi + etiket balonu */}
+      {sceneVariant === "callout" && cat && (
+        <CalloutAnnotation localFrame={localFrame} label={cat} />
+      )}
+
+      {/* spec_table: kategori bazlı animasyonlu bilgi tablosu */}
+      {sceneVariant === "spec_table" && (
+        <SpecTableOverlay
+          localFrame={localFrame}
+          categoryLabelEn={cat ?? "exterior"}
         />
       )}
     </AbsoluteFill>
@@ -1118,16 +2206,47 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   outroFrames = OUTRO_FRAMES,
   reelStyle = "cinematic",
 }) => {
+  const frame = useCurrentFrame();
   const preset = STYLE_PRESETS[reelStyle];
   const safeOutroFrames = Math.max(0, outroFrames);
   const totalFrames = getTotalFrames(mediaItems, { outroFrames: safeOutroFrames, crossfadeFrames: preset.crossfadeFrames });
   const outroStartFrame = totalFrames - safeOutroFrames;
 
+  // Aktif sahnede hangi variant çalışıyor?
+  let activeVariant = "full_bleed";
+  for (let i = 0; i < mediaItems.length; i++) {
+    const start   = getItemStartFrame(mediaItems, i, preset.crossfadeFrames);
+    const isLast  = i === mediaItems.length - 1;
+    const nextStart = isLast ? Infinity : getItemStartFrame(mediaItems, i + 1, preset.crossfadeFrames);
+    if (frame >= start && frame < nextStart) {
+      activeVariant = mediaItems[i].sceneVariant ?? "full_bleed";
+      break;
+    }
+  }
+
+  // Kendi metin/overlay sistemi olan layout'larda global elementler gizlenir
+  const SUPPRESS_TEXT = new Set([
+    "split_specs", "spec_table", "side_table",
+    "card_panel", "letter_box", "feature_hero",
+    "duo_split", "trio_mosaic",
+  ]);
+  const SUPPRESS_OVERLAYS = new Set([
+    "card_panel", "letter_box", "feature_hero",
+    "duo_split", "trio_mosaic",
+    "split_specs", "side_table",
+  ]);
+
+  const hideTextBlock = SUPPRESS_TEXT.has(activeVariant);
+  const hideOverlays  = SUPPRESS_OVERLAYS.has(activeVariant);
+
   return (
     <AbsoluteFill style={{ background: "#060608", overflow: "hidden" }}>
       {/* Medya katmanları */}
       {mediaItems.map((item, i) => (
-        <MediaSlide key={i} item={item} index={i} items={mediaItems} preset={preset} />
+        <MediaSlide
+          key={i} item={item} index={i} items={mediaItems} preset={preset}
+          carBrand={carBrand} carModel={carModel} year={year} price={price}
+        />
       ))}
 
       {/* Geçiş light leak */}
@@ -1136,26 +2255,28 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
       {/* Film grain */}
       <FilmGrain opacity={preset.grainOpacity} />
 
-      {/* Vignette + alt gradient */}
-      <Vignette />
-
-      {/* Üst gradient */}
-      <TopGradient />
+      {/* Vignette + gradients — kart layoutlarda kapatılır */}
+      {!hideOverlays && <Vignette />}
+      {!hideOverlays && <TopGradient />}
 
       {/* Slayt ilerleme noktaları */}
-      <ProgressDots items={mediaItems} totalFrames={totalFrames} outroFrames={safeOutroFrames} crossfadeFrames={preset.crossfadeFrames} />
+      {!hideOverlays && (
+        <ProgressDots items={mediaItems} totalFrames={totalFrames} outroFrames={safeOutroFrames} crossfadeFrames={preset.crossfadeFrames} />
+      )}
 
       {/* Galeri rozeti */}
-      <GalleryBadge name={galleryName} layout={layout} />
+      {!hideOverlays && <GalleryBadge name={galleryName} layout={layout} />}
 
-      {/* Alt metin */}
-      <TextBlock
-        carBrand={carBrand}
-        carModel={carModel}
-        year={year}
-        price={price}
-        layout={layout}
-      />
+      {/* Alt metin — kendi layout'u olan sahnelerde gizle */}
+      {!hideTextBlock && (
+        <TextBlock
+          carBrand={carBrand}
+          carModel={carModel}
+          year={year}
+          price={price}
+          layout={layout}
+        />
+      )}
 
       {/* Outro CTA */}
       {safeOutroFrames > 0 && (

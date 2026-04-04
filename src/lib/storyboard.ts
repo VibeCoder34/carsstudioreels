@@ -21,10 +21,26 @@ export interface PhotoAnalyzeResult {
   outro_frames: number;
 }
 
-/** İçerik süresi hedefi (~32 sn @ 30fps); toplam video outro ile ~35 sn olur */
-export const TARGET_CONTENT_FRAMES = 960;
-export const MIN_SHOT_FRAMES = 36;
-export const MAX_SHOT_FRAMES = 200;
+/** İçerik süresi hedefi (~36 sn @ 30fps); toplam video outro ile ~39 sn olur */
+export const TARGET_CONTENT_FRAMES = 1080;
+export const MIN_SHOT_FRAMES = 60;   // normal shot minimum — 2 sn
+export const MAX_SHOT_FRAMES = 210;
+
+/** Layout variantları daha uzun tutulur — okumak için zaman lazım */
+const DATA_VARIANTS = new Set([
+  "spec_table", "side_table", "split_specs", "floating_card",
+  "card_panel", "letter_box", "feature_hero",
+  "duo_split", "trio_mosaic",
+]);
+const MIN_DATA_FRAMES = 150;  // 5 sn minimum
+const MAX_DATA_FRAMES = 300;  // 10 sn maximum
+
+function shotMin(s: StoryboardShot): number {
+  return DATA_VARIANTS.has(s.scene_variant) ? MIN_DATA_FRAMES : MIN_SHOT_FRAMES;
+}
+function shotMax(s: StoryboardShot): number {
+  return DATA_VARIANTS.has(s.scene_variant) ? MAX_DATA_FRAMES : MAX_SHOT_FRAMES;
+}
 
 function dedupeCategoryIds(shots: StoryboardShot[]): void {
   const seen = new Set<string>();
@@ -55,18 +71,22 @@ export function normalizeStoryboardDurations(shots: StoryboardShot[]): void {
   if (sum <= 0) return;
   const scale = TARGET_CONTENT_FRAMES / sum;
   for (const s of shots) {
+    const min = shotMin(s);
+    const max = shotMax(s);
     s.duration_frames = Math.round(Math.max(1, s.duration_frames) * scale);
-    s.duration_frames = Math.min(MAX_SHOT_FRAMES, Math.max(MIN_SHOT_FRAMES, s.duration_frames));
+    s.duration_frames = Math.min(max, Math.max(min, s.duration_frames));
   }
   const total = shots.reduce((a, s) => a + s.duration_frames, 0);
   let drift = TARGET_CONTENT_FRAMES - total;
   let i = 0;
   while (drift !== 0 && i < shots.length * 4) {
     const idx = i % shots.length;
-    if (drift > 0 && shots[idx].duration_frames < MAX_SHOT_FRAMES) {
+    const min = shotMin(shots[idx]);
+    const max = shotMax(shots[idx]);
+    if (drift > 0 && shots[idx].duration_frames < max) {
       shots[idx].duration_frames += 1;
       drift -= 1;
-    } else if (drift < 0 && shots[idx].duration_frames > MIN_SHOT_FRAMES) {
+    } else if (drift < 0 && shots[idx].duration_frames > min) {
       shots[idx].duration_frames -= 1;
       drift += 1;
     }

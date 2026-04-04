@@ -44,6 +44,16 @@ export const SCENE_VARIANTS = [
   "color_wash",
   "split_band",
   "ken_zoom_slow",
+  "split_specs",
+  "floating_card",
+  "callout",
+  "spec_table",
+  "side_table",
+  "card_panel",
+  "letter_box",
+  "feature_hero",
+  "duo_split",
+  "trio_mosaic",
 ] as const;
 
 export type SceneVariant = (typeof SCENE_VARIANTS)[number];
