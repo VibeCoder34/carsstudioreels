@@ -51,7 +51,9 @@ export async function POST(req: NextRequest) {
 
     const maxRepeat = Math.max(2, Math.ceil(clean.length / 5));
 
-    const promptText = `You are a premium automotive video storyboard director.
+    const isPortraitFormat = aspectRatio === "9:16" || aspectRatio === "3:4";
+
+    const baseHeader = `You are a premium automotive video storyboard director.
 
 INPUT: ${clean.length} car photos (JPEG, indexed 0-based).
 OUTPUT VIDEO FORMAT: ${aspectRatio}
@@ -94,6 +96,74 @@ TASK B — Assign exactly ONE unique category_id per photo:
 1) Prefer fixed ids (use each max once): "${fixedList}"
 2) Otherwise invent a specific English snake_case id.
 3) category_label_en: short English label for display.
+`;
+
+    const portraitPrompt = `${baseHeader}
+
+━━━ PORTRAIT-FIRST (MOBILE) DIRECTIVE ━━━
+You are producing a premium vertical social video (TikTok/Reels/Shorts).
+The edit must feel designed for mobile: big typography, quick comprehension, and strong hook.
+
+PORTRAIT RULES:
+1) Prefer layouts that look intentional on vertical screens:
+   Priority: "listing_panel", "editorial_right", "editorial_left", "framed_center", "floating_card", "callout", "split_specs", "spec_table".
+2) "letter_box" is allowed but must be used at most once and only if the photo is a true landscape hero shot.
+3) Use "split_band" only for clean profile/side shots (if present).
+4) Avoid multi-image grids unless you have enough distinct angles:
+   - "duo_split" use at most once.
+   - "trio_mosaic" use at most once and only mid-video.
+5) The first 2 shots MUST be highly readable: no dense tables, no tiny labels.
+
+TASK C — Portrait narrative arc (mobile-first, maximum variety):
+  SHOT 1: Hook. "editorial_right" or "framed_center". 150–210 frames.
+  SHOT 2: "listing_panel" (KM/Vites/Yakıt/Kasa). 150–210 frames.
+  SHOT 3: "callout" (detail) OR "floating_card" (meta). 120–180 frames.
+  SHOT 4: "split_specs" (motor-focused). 150–210 frames.
+  SHOT 5: "editorial_left" (brand identity alternate). 150–210 frames.
+  SHOT 6: "spec_table" or "card_panel" (table). 210–300 frames.
+  SHOT 7 (optional): "duo_split" OR "trio_mosaic" (mid montage). 180–240 frames.
+  SECOND TO LAST: "split_specs" or "spec_table". 180–240 frames.
+  LAST: "feature_hero" (performance climax). 210–300 frames.
+  For ${clean.length} < 7 photos, skip slots in order but keep the same principle.
+
+TASK D — Duration per shot (portrait):
+  - Readable layouts: 150–240 frames
+  - Dense tables: 210–330 frames
+  - Detail callout: 90–150 frames
+  Min 90 frames, max 360 frames.
+
+TASK E — scene_variant rules summary:
+  • "callout" → only for close-up details (badge, headlight, wheel center cap)
+  • "split_band" → only for clean profile/side shots
+  • "duo_split" → use max 1 time; pick complementary photos
+  • "trio_mosaic" → use max 1 time; mid-video only
+  • "feature_hero" → use exactly 1 time (last shot ideally)
+  • Everything else → spread freely, no consecutive duplicates
+
+Also set quality_score (1–10), lighting: "excellent"|"good"|"average"|"poor".
+
+OUTPUT — ONLY valid JSON, no markdown:
+{
+  "storyboard": [{
+    "source_index": 0,
+    "category_id": "front",
+    "category_label_en": "Front",
+    "comment_tr": "Türkçe yorum",
+    "quality_score": 8,
+    "lighting": "good",
+    "duration_frames": 180,
+    "scene_variant": "framed_center"
+  }],
+  "editing_notes_tr": "Kısa Türkçe genel kurgu notu",
+  "outro_frames": 90
+}
+
+MUST: exactly ${clean.length} entries, each source_index once.
+Target ~${clean.length * 180} frames total (~${Math.round(clean.length * 6)} sn).
+NO full_bleed · NO push_horizontal · NO color_wash.
+NO variant repeated > ${maxRepeat} times · NO two consecutive same variant.`;
+
+    const landscapePrompt = `${baseHeader}
 
 TASK C — Narrative arc with MAXIMUM VARIETY:
   SHOT 1: Hook. "framed_center". 150–180 frames.
@@ -149,6 +219,8 @@ MUST: exactly ${clean.length} entries, each source_index once.
 Target ~${clean.length * 180} frames total (~${Math.round(clean.length * 6)} sn).
 NO full_bleed · NO push_horizontal · NO color_wash.
 NO variant repeated > ${maxRepeat} times · NO two consecutive same variant.`;
+
+    const promptText = isPortraitFormat ? portraitPrompt : landscapePrompt;
 
     contentBlocks.push({ type: "text", text: promptText });
 

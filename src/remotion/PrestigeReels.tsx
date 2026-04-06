@@ -1836,10 +1836,58 @@ function MediaSlide({
     );
   }
 
+  const blurBg = aspectRatio ? needsBlurBackground(aspectRatio) : false;
+  const showHud =
+    item.type === "image" &&
+    [
+      "full_bleed",
+      "slide_entry_left",
+      "slide_entry_right",
+      "push_horizontal",
+      "color_wash",
+      "ken_zoom_slow",
+    ].includes(sceneVariant);
+
   return (
     <AbsoluteFill style={{ opacity, overflow: "hidden", background: item.type === "image" ? "#050508" : undefined }}>
       {item.type === "image" ? (
-        <Img src={item.src} style={containStyle} />
+        <>
+          {/* Backdrop: blurred cover fill to avoid empty space (esp. portrait) */}
+          <Img
+            src={item.src}
+            style={{
+              ...mediaStyle,
+              objectFit: "cover",
+              filter: `${colorGrade} blur(${blurBg ? 54 : 38}px) brightness(0.52) saturate(1.15)`,
+              opacity: 0.92,
+              transform: `scale(${finalScale * 1.08}) translate(${finalTx * 0.25}px, ${finalTy * 0.25}px)`,
+            }}
+          />
+          <AbsoluteFill
+            style={{
+              pointerEvents: "none",
+              background:
+                "radial-gradient(ellipse at 50% 35%, rgba(248,201,106,0.10) 0%, rgba(6,8,14,0.65) 55%, rgba(3,3,6,0.92) 100%)",
+              mixBlendMode: "normal",
+            }}
+          />
+
+          {/* Foreground: contained hero card */}
+          <div
+            style={{
+              position: "absolute",
+              inset: blurBg ? 64 : 56,
+              borderRadius: 22,
+              overflow: "hidden",
+              background: "rgba(3,3,6,0.38)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              boxShadow: "0 28px 90px rgba(0,0,0,0.70)",
+            }}
+          >
+            <Img src={item.src} style={{ ...containStyle, filter: colorGrade + blurFilter }} />
+            <AbsoluteFill style={{ background: "linear-gradient(to top, rgba(3,3,6,0.55) 0%, transparent 55%)", pointerEvents: "none" }} />
+          </div>
+        </>
       ) : (
         <Video
           src={item.src}
@@ -1851,6 +1899,28 @@ function MediaSlide({
           muted
         />
       )}
+
+      {showHud && (
+        <KineticHud
+          localFrame={localFrame}
+          categoryLabelEn={cat}
+          carBrand={carBrand}
+          carModel={carModel}
+          year={year}
+          price={price}
+          km={km}
+          vites={vites}
+          yakit={yakit}
+          kasa={kasa}
+          renk={renk}
+          cekis={cekis}
+          motorGucu={motorGucu}
+          motorHacmi={motorHacmi}
+          aracDurumu={aracDurumu}
+          aspectRatio={aspectRatio}
+        />
+      )}
+
       {cat && (
         <div
           style={{
@@ -1913,6 +1983,143 @@ function MediaSlide({
           categoryLabelEn={cat ?? "exterior"}
         />
       )}
+    </AbsoluteFill>
+  );
+}
+
+function KineticHud({
+  localFrame,
+  categoryLabelEn,
+  carBrand,
+  carModel,
+  year,
+  price,
+  km,
+  vites,
+  yakit,
+  kasa,
+  renk,
+  cekis,
+  motorGucu,
+  motorHacmi,
+  aracDurumu,
+  aspectRatio,
+}: {
+  localFrame: number;
+  categoryLabelEn?: string;
+  carBrand: string;
+  carModel: string;
+  year: string;
+  price: string;
+  km?: string;
+  vites?: string;
+  yakit?: string;
+  kasa?: string;
+  renk?: string;
+  cekis?: string;
+  motorGucu?: string;
+  motorHacmi?: string;
+  aracDurumu?: string;
+  aspectRatio?: AspectRatioOption;
+}) {
+  const portrait = aspectRatio ? needsBlurBackground(aspectRatio) : false;
+  const pad = portrait ? 56 : 50;
+
+  const inOp = interpolate(localFrame, [10, 34], [0, 1], { extrapolateRight: "clamp" });
+  const rise = interpolate(localFrame, [10, 34], [14, 0], { extrapolateRight: "clamp", easing: easeOut });
+
+  const chips: { k: string; v: string; gold?: boolean }[] = [
+    { k: "YIL", v: year },
+    aracDurumu ? { k: "DURUM", v: aracDurumu } : null,
+    km ? { k: "KM", v: km } : null,
+    vites ? { k: "VİTES", v: vites } : null,
+    yakit ? { k: "YAKIT", v: yakit } : null,
+    kasa ? { k: "KASA", v: kasa } : null,
+    motorGucu ? { k: "GÜÇ", v: motorGucu } : null,
+    motorHacmi ? { k: "HACİM", v: motorHacmi } : null,
+    cekis ? { k: "ÇEKİŞ", v: cekis } : null,
+    renk ? { k: "RENK", v: renk } : null,
+    { k: "FİYAT", v: price, gold: true },
+  ].filter(Boolean).slice(0, portrait ? 7 : 8) as { k: string; v: string; gold?: boolean }[];
+
+  const tickerW = 520 + (chips.length * 160);
+  const loopT = (localFrame / 180) % 1;
+  const tickerX = interpolate(loopT, [0, 1], [0, -tickerW / 2]);
+
+  return (
+    <AbsoluteFill style={{ pointerEvents: "none", opacity: inOp, transform: `translateY(${rise}px)` }}>
+      {/* Corner brackets */}
+      <div style={{ position: "absolute", top: pad, left: pad, width: 38, height: 38, borderLeft: "2px solid rgba(248,201,106,0.6)", borderTop: "2px solid rgba(248,201,106,0.6)", borderRadius: 6 }} />
+      <div style={{ position: "absolute", top: pad, right: pad, width: 38, height: 38, borderRight: "2px solid rgba(248,201,106,0.35)", borderTop: "2px solid rgba(248,201,106,0.35)", borderRadius: 6 }} />
+      <div style={{ position: "absolute", bottom: pad, left: pad, width: 38, height: 38, borderLeft: "2px solid rgba(248,201,106,0.35)", borderBottom: "2px solid rgba(248,201,106,0.35)", borderRadius: 6 }} />
+      <div style={{ position: "absolute", bottom: pad, right: pad, width: 38, height: 38, borderRight: "2px solid rgba(248,201,106,0.6)", borderBottom: "2px solid rgba(248,201,106,0.6)", borderRadius: 6 }} />
+
+      {/* Top identity */}
+      <div style={{ position: "absolute", top: pad + 10, left: pad + 14, display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {categoryLabelEn && (
+            <div style={{ padding: "8px 12px", borderRadius: 12, background: "rgba(0,0,0,0.42)", border: "1px solid rgba(248,201,106,0.22)", backdropFilter: "blur(12px)" }}>
+              <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>
+                {categoryLabelEn}
+              </span>
+            </div>
+          )}
+          <div style={{ height: 1, width: portrait ? 96 : 140, background: "linear-gradient(to right, rgba(248,201,106,0.7), transparent)" }} />
+        </div>
+
+        <div style={{ fontFamily: "sans-serif", fontSize: portrait ? 34 : 38, fontWeight: 900, color: "rgba(255,255,255,0.95)", letterSpacing: "-0.6px", textShadow: "0 18px 60px rgba(0,0,0,0.45)" }}>
+          {carBrand}
+        </div>
+        <div style={{ fontFamily: "sans-serif", fontSize: portrait ? 20 : 22, fontWeight: 500, color: "rgba(255,255,255,0.70)", letterSpacing: "0.2px" }}>
+          {carModel}
+        </div>
+      </div>
+
+      {/* Bottom rolling specs rail */}
+      <div
+        style={{
+          position: "absolute",
+          left: pad,
+          right: pad,
+          bottom: pad - 6,
+          height: portrait ? 88 : 82,
+          borderRadius: 18,
+          overflow: "hidden",
+          background: "rgba(0,0,0,0.30)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          backdropFilter: "blur(16px)",
+          boxShadow: "0 18px 60px rgba(0,0,0,0.55)",
+        }}
+      >
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(248,201,106,0.12) 0%, transparent 45%, rgba(248,201,106,0.10) 100%)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, display: "flex", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 12, transform: `translateX(${tickerX}px)` }}>
+            {[...chips, ...chips].map((c, i) => (
+              <div
+                key={`${c.k}-${i}`}
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 10,
+                  padding: portrait ? "12px 16px" : "11px 16px",
+                  marginLeft: i === 0 ? 10 : 0,
+                  borderRadius: 16,
+                  background: c.gold ? "rgba(248,201,106,0.12)" : "rgba(255,255,255,0.06)",
+                  border: c.gold ? "1px solid rgba(248,201,106,0.30)" : "1px solid rgba(255,255,255,0.10)",
+                  minWidth: c.gold ? 220 : 180,
+                }}
+              >
+                <div style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: "0.18em", color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
+                  {c.k}
+                </div>
+                <div style={{ fontFamily: "sans-serif", fontSize: c.gold ? (portrait ? 22 : 20) : 16, fontWeight: c.gold ? 800 : 700, color: c.gold ? "#f8c96a" : "rgba(255,255,255,0.92)", letterSpacing: "0.3px", textShadow: c.gold ? "0 0 18px rgba(248,201,106,0.35)" : "none" }}>
+                  {c.v}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </AbsoluteFill>
   );
 }
