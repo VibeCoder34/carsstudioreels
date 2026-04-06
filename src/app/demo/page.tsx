@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   Upload, Plus, Wand2, Sparkles, ArrowLeft, X,
   ChevronRight, ImageIcon, Phone, Brain,
-  Star, Search,
+  Star, Search, Mic,
 } from "lucide-react";
 import {
   PrestigeReels,
@@ -32,6 +32,11 @@ import {
   type StoryboardShot,
   type FlowRecommendation,
 } from "@/lib/storyboard";
+import {
+  attachVoiceoverAudioToMediaItems,
+  revokeVoiceoverObjectUrls,
+  type VoiceoverLanguage,
+} from "@/lib/voiceoverPipeline";
 
 const Player = dynamic(
   () => import("@remotion/player").then((m) => m.Player),
@@ -121,6 +126,10 @@ export default function DemoPage() {
     ilanTarihi: "30 Mart 2026",
   });
   const [reelStyle, setReelStyle] = useState<ReelStyle>("cinematic");
+  const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
+  const [voiceoverLanguage, setVoiceoverLanguage] = useState<VoiceoverLanguage>("tr");
+  /** TTS kısmen/başarısız olduğunda önizlemede gösterilir */
+  const [voiceoverTtsNotice, setVoiceoverTtsNotice] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const preAnalyzeMediaRef = useRef<MediaItem[] | null>(null);
@@ -145,7 +154,9 @@ export default function DemoPage() {
 
   const handleAnalyze = async () => {
     setAnalyzeError("");
+    setVoiceoverTtsNotice("");
     setStep("analyzing");
+    revokeVoiceoverObjectUrls(mediaItems);
     preAnalyzeMediaRef.current = mediaItems.map((m) => ({ ...m }));
 
     try {
@@ -161,7 +172,12 @@ export default function DemoPage() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos, aspectRatio }),
+        body: JSON.stringify({
+          photos,
+          aspectRatio,
+          voiceover: voiceoverEnabled,
+          ...(voiceoverEnabled ? { voiceoverLanguage } : {}),
+        }),
       });
 
       if (!res.ok) {
@@ -171,9 +187,11 @@ export default function DemoPage() {
 
       setAnalyzePhase("Kurgu tamamlanıyor...");
       const raw = await res.json();
-      const result = normalizePhotoAnalyzeResult(raw, files.length);
+      const result = normalizePhotoAnalyzeResult(raw, files.length, {
+        voiceover: voiceoverEnabled,
+      });
 
-      const ordered: MediaItem[] = result.storyboard.map((shot) => {
+      let ordered: MediaItem[] = result.storyboard.map((shot) => {
         const idx =
           mediaItems.length > 0
             ? Math.min(mediaItems.length - 1, Math.max(0, shot.source_index))
@@ -185,8 +203,22 @@ export default function DemoPage() {
           durationFrames: shot.duration_frames,
           sceneVariant: isSceneVariant(shot.scene_variant) ? shot.scene_variant : undefined,
           categoryLabelEn: shot.category_label_en || shot.category_id,
+          voiceoverText: shot.voiceover_text,
         };
       });
+
+      if (voiceoverEnabled) {
+        setAnalyzePhase("Seslendirme üretiliyor (ElevenLabs)…");
+        const vo = await attachVoiceoverAudioToMediaItems(ordered, result.storyboard, voiceoverLanguage);
+        ordered = vo.items;
+        if (vo.ttsError) {
+          setVoiceoverTtsNotice(vo.ttsError);
+        } else if (vo.ttsPartialFailure) {
+          setVoiceoverTtsNotice(
+            "Bazı sahnelerde ses üretilemedi; bu sahneler sessiz kaldı."
+          );
+        }
+      }
 
       setMediaItems(ordered);
       setAnalysisResult(result);
@@ -199,9 +231,18 @@ export default function DemoPage() {
     }
   };
 
+  const voiceoverSync = useMemo(
+    () => voiceoverEnabled && mediaItems.some((m) => Boolean(m.audioSrc)),
+    [voiceoverEnabled, mediaItems]
+  );
+
   const totalFrames = useMemo(
-    () => getTotalFrames(mediaItems, { outroFrames, crossfadeFrames: STYLE_PRESETS[reelStyle].crossfadeFrames }),
-    [mediaItems, outroFrames, reelStyle]
+    () =>
+      getTotalFrames(mediaItems, {
+        outroFrames,
+        crossfadeFrames: voiceoverSync ? 0 : STYLE_PRESETS[reelStyle].crossfadeFrames,
+      }),
+    [mediaItems, outroFrames, reelStyle, voiceoverSync]
   );
 
   const flowRec = useMemo<FlowRecommendation | null>(
@@ -269,6 +310,10 @@ export default function DemoPage() {
             aspectRatio={aspectRatio}
             reelStyle={reelStyle}
             flowRec={flowRec}
+            voiceoverEnabled={voiceoverEnabled}
+            voiceoverLanguage={voiceoverLanguage}
+            onVoiceoverEnabledChange={setVoiceoverEnabled}
+            onVoiceoverLanguageChange={setVoiceoverLanguage}
             onAspectRatioChange={setAspectRatio}
             onStyleChange={setReelStyle}
             onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
@@ -294,11 +339,16 @@ export default function DemoPage() {
             aspectRatio={aspectRatio}
             outroFrames={outroFrames}
             reelStyle={reelStyle}
+            voiceoverEnabled={voiceoverEnabled}
+            voiceoverSync={voiceoverSync}
+            ttsNotice={voiceoverTtsNotice}
             onReset={() => {
+              revokeVoiceoverObjectUrls(mediaItems);
               if (preAnalyzeMediaRef.current) {
                 setMediaItems(preAnalyzeMediaRef.current.map((m) => ({ ...m })));
               }
               setAnalysisResult(null);
+              setVoiceoverTtsNotice("");
               setStep("upload");
             }}
           />
@@ -321,6 +371,8 @@ const ASPECT_RATIO_OPTIONS: { value: AspectRatioOption; label: string; sub: stri
 function UploadStep({
   mediaItems, isDragging, form, fileInputRef, error,
   aspectRatio, reelStyle, flowRec,
+  voiceoverEnabled, voiceoverLanguage,
+  onVoiceoverEnabledChange, onVoiceoverLanguageChange,
   onAspectRatioChange, onStyleChange,
   onDrop, onDragOver, onDragLeave, onFileChange,
   onRemoveItem, onFormChange, onAnalyze,
@@ -333,6 +385,10 @@ function UploadStep({
   aspectRatio: AspectRatioOption;
   reelStyle: ReelStyle;
   flowRec: FlowRecommendation | null;
+  voiceoverEnabled: boolean;
+  voiceoverLanguage: VoiceoverLanguage;
+  onVoiceoverEnabledChange: (v: boolean) => void;
+  onVoiceoverLanguageChange: (v: VoiceoverLanguage) => void;
   onAspectRatioChange: (ar: AspectRatioOption) => void;
   onStyleChange: (style: ReelStyle) => void;
   onDrop: (e: React.DragEvent) => void;
@@ -442,6 +498,49 @@ function UploadStep({
                 {error}
               </div>
             )}
+
+            <div className="demo-card p-4 space-y-3">
+              <div className="demo-section-label flex items-center gap-2">
+                <Mic className="w-4 h-4 text-[var(--primary)]" />
+                Seslendirme (ElevenLabs)
+              </div>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={voiceoverEnabled}
+                  onChange={(e) => onVoiceoverEnabledChange(e.target.checked)}
+                  className="mt-1 rounded border-[var(--border)]"
+                />
+                <span className="text-sm text-[var(--foreground)] leading-snug">
+                  Videoya AI seslendirmesi ekle (isteğe bağlı). Açıkken her sahne için söylenecek metin kurguda üretilir ve ses bitene kadar sahne uzatılabilir.
+                </span>
+              </label>
+              <div className={`space-y-2 pl-1 ${!voiceoverEnabled ? "opacity-45 pointer-events-none" : ""}`}>
+                <div className="text-xs text-[var(--muted-foreground)]">Seslendirme dili</div>
+                <div className="flex flex-wrap gap-2">
+                  {([
+                    { code: "tr" as const, label: "Türkçe" },
+                    { code: "en" as const, label: "English" },
+                  ]).map((opt) => {
+                    const active = voiceoverLanguage === opt.code;
+                    return (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        onClick={() => onVoiceoverLanguageChange(opt.code)}
+                        className={`px-4 py-2 rounded-[var(--radius-pill)] text-sm font-medium border transition-all ${
+                          active
+                            ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                            : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
 
             <div
               onDrop={onDrop}
@@ -691,7 +790,8 @@ function AnalyzingStep({ mediaItems, phase }: { mediaItems: MediaItem[]; phase: 
 /* ─── Preview adımı ──────────────────────────────────────── */
 
 function PreviewStep({
-  mediaItems, form, totalFrames, analysisResult, aspectRatio, outroFrames, reelStyle, onReset,
+  mediaItems, form, totalFrames, analysisResult, aspectRatio, outroFrames, reelStyle,
+  voiceoverEnabled, voiceoverSync, ttsNotice, onReset,
 }: {
   mediaItems: MediaItem[];
   form: FormData;
@@ -700,6 +800,9 @@ function PreviewStep({
   aspectRatio: AspectRatioOption;
   outroFrames: number;
   reelStyle: ReelStyle;
+  voiceoverEnabled: boolean;
+  voiceoverSync: boolean;
+  ttsNotice: string;
   onReset: () => void;
 }) {
   const durationSec = (totalFrames / FPS).toFixed(1);
@@ -714,6 +817,14 @@ function PreviewStep({
       <div className="max-w-5xl mx-auto">
 
         <div className="mb-6 sm:mb-8 text-center">
+          {ttsNotice ? (
+            <div
+              role="status"
+              className="mb-4 max-w-2xl mx-auto rounded-xl border border-amber-500/35 bg-amber-500/[0.08] px-4 py-3 text-left text-xs sm:text-sm text-amber-100/95 leading-relaxed"
+            >
+              {ttsNotice}
+            </div>
+          ) : null}
           <div className="inline-flex items-center gap-2 border border-[var(--primary)]/25 bg-[var(--primary)]/10 text-[var(--primary)] text-xs font-semibold px-4 py-2 rounded-[var(--radius-pill)] mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
             {analysisResult ? "AI kurgusu hazır" : "Önizleme"}
@@ -723,6 +834,14 @@ function PreviewStep({
           </h2>
           <p className="text-[var(--muted-foreground)] text-sm mt-1">
             {mediaItems.length} sahne · ~{durationSec} sn · {aspectRatio} ({compWidth}×{compHeight})
+            {voiceoverEnabled && (
+              <span className="block mt-1 text-[11px]">
+                Seslendirme:{" "}
+                {voiceoverSync
+                  ? "açık (ses bitene kadar sahne; sıralı kesim)"
+                  : "istendi ancak ses üretilemedi veya metin yok"}
+              </span>
+            )}
           </p>
         </div>
 
@@ -773,6 +892,7 @@ function PreviewStep({
                     aspectRatio,
                     outroFrames,
                     reelStyle,
+                    voiceoverSync,
                   }}
                 />
               </div>
@@ -804,6 +924,13 @@ function PreviewStep({
                         </span>
                       </div>
                       <p className="text-[11px] text-[var(--muted-foreground)] leading-snug">{shot.comment_tr}</p>
+                      {voiceoverEnabled && shot.voiceover_text && (
+                        <p className="text-[11px] text-[var(--foreground)] leading-snug mt-1.5 pl-2 border-l-2 border-[var(--primary)]/40">
+                          <span className="text-[10px] uppercase tracking-wider text-[var(--primary)] font-semibold">Seslendirme</span>
+                          <br />
+                          {shot.voiceover_text}
+                        </p>
+                      )}
                       <div className="flex items-center gap-3 mt-1.5">
                         <span className="text-[10px] text-[var(--muted-foreground)]">
                           <Star className="w-2.5 h-2.5 inline text-amber-400 mr-0.5" />

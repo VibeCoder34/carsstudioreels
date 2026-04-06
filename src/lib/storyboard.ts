@@ -13,6 +13,8 @@ export interface StoryboardShot {
   lighting: string;
   duration_frames: number;
   scene_variant: string;
+  /** TTS ile okunacak sahne metni (analyze isteğinde seslendirme açıksa dolar). */
+  voiceover_text?: string;
 }
 
 export interface PhotoAnalyzeResult {
@@ -138,6 +140,7 @@ export function normalizeStoryboardDurations(shots: StoryboardShot[]): void {
 }
 
 function asShot(s: Record<string, unknown>): StoryboardShot {
+  const vo = s.voiceover_text ?? s.voiceoverText;
   return {
     source_index: Number(s.source_index ?? s.sourceIndex ?? 0),
     category_id: String(s.category_id ?? s.categoryId ?? "other"),
@@ -147,6 +150,7 @@ function asShot(s: Record<string, unknown>): StoryboardShot {
     lighting: String(s.lighting ?? "good"),
     duration_frames: Number(s.duration_frames ?? s.durationFrames ?? 150),
     scene_variant: String(s.scene_variant ?? s.sceneVariant ?? "full_bleed"),
+    voiceover_text: typeof vo === "string" ? vo : undefined,
   };
 }
 
@@ -213,10 +217,17 @@ export function repairStoryboard(shots: StoryboardShot[], photoCount: number): S
   });
 }
 
+export type NormalizeAnalyzeOptions = {
+  /** false ise voiceover alanları silinir (Claude bazen yine döndürebilir). */
+  voiceover?: boolean;
+};
+
 export function normalizePhotoAnalyzeResult(
   raw: Record<string, unknown>,
-  photoCount: number
+  photoCount: number,
+  options?: NormalizeAnalyzeOptions
 ): PhotoAnalyzeResult {
+  const wantVoiceover = options?.voiceover === true;
   const rawList = (raw.storyboard ?? []) as Record<string, unknown>[];
   let storyboard: StoryboardShot[] = rawList.map(asShot).map((s) => ({
     ...s,
@@ -229,6 +240,18 @@ export function normalizePhotoAnalyzeResult(
   storyboard = repairStoryboard(storyboard, photoCount);
   dedupeCategoryIds(storyboard);
   normalizeStoryboardDurations(storyboard);
+  if (wantVoiceover) {
+    storyboard = storyboard.map((s) => ({
+      ...s,
+      voiceover_text: (s.voiceover_text ?? "").trim(),
+    }));
+  } else {
+    storyboard = storyboard.map((s) => {
+      const rest = { ...s };
+      delete rest.voiceover_text;
+      return rest;
+    });
+  }
   return {
     storyboard,
     editing_notes_tr: String(raw.editing_notes_tr ?? raw.editingNotes ?? ""),

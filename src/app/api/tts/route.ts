@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  ElevenLabsTtsHttpError,
   elevenLabsTts,
   getElevenLabsConfig,
   parseTtsLanguage,
@@ -110,6 +111,16 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (err) {
+    if (err instanceof ElevenLabsTtsHttpError) {
+      return NextResponse.json(
+        {
+          error: "TTS failed",
+          code: err.apiCode,
+          details: err.message,
+        },
+        { status: err.status }
+      );
+    }
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: "TTS failed", details: message }, { status: 500 });
   }

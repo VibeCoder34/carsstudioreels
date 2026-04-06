@@ -41,6 +41,53 @@ export type ElevenLabsTtsResult = {
   contentType: string;
 };
 
+/** ElevenLabs HTTP hatası — API route’da `instanceof` ile yakalanır. */
+export class ElevenLabsTtsHttpError extends Error {
+  readonly status: number;
+  readonly apiCode?: string;
+  readonly rawBody: string;
+
+  constructor(opts: {
+    status: number;
+    apiCode?: string;
+    rawBody: string;
+    message: string;
+  }) {
+    super(opts.message);
+    this.name = "ElevenLabsTtsHttpError";
+    this.status = opts.status;
+    this.apiCode = opts.apiCode;
+    this.rawBody = opts.rawBody;
+  }
+}
+
+/** Ücretsiz planda kütüphane voice ID’leri API’de engellenebilir. */
+export const ELEVENLABS_PAID_PLAN_HINT =
+  "Ücretsiz ElevenLabs hesabında kütüphane (library) sesleri API üzerinden kullanılamaz. Plan yükseltin veya ELEVENLABS_VOICE_ID_TR / ELEVENLABS_VOICE_ID_EN olarak kendi oluşturduğunuz sesin ID’sini kullanın (ör. Instant Voice Clone). — Free tier: use a custom voice ID you own, not a library voice.";
+
+function parseElevenLabsErrorBody(text: string): {
+  apiCode?: string;
+  message?: string;
+} {
+  try {
+    const j = JSON.parse(text) as { detail?: unknown };
+    const d = j.detail;
+    if (d && typeof d === "object" && d !== null) {
+      const o = d as Record<string, unknown>;
+      return {
+        apiCode: typeof o.code === "string" ? o.code : undefined,
+        message: typeof o.message === "string" ? o.message : undefined,
+      };
+    }
+    if (typeof d === "string") {
+      return { message: d };
+    }
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
 function getEnv(name: string): string | undefined {
   const v = process.env[name];
   return v && v.trim() ? v.trim() : undefined;
@@ -131,7 +178,25 @@ export async function elevenLabsTts(req: ElevenLabsTtsRequest): Promise<ElevenLa
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`ElevenLabs TTS failed (${res.status}): ${body || res.statusText}`);
+    const parsed = parseElevenLabsErrorBody(body);
+    const apiCode = parsed.apiCode;
+    const upstream = parsed.message;
+
+    let message: string;
+    if (res.status === 402 && apiCode === "paid_plan_required") {
+      message = ELEVENLABS_PAID_PLAN_HINT;
+    } else {
+      message =
+        upstream?.trim() ||
+        `ElevenLabs TTS failed (${res.status}): ${body || res.statusText}`;
+    }
+
+    throw new ElevenLabsTtsHttpError({
+      status: res.status,
+      apiCode,
+      rawBody: body,
+      message,
+    });
   }
 
   const audio = await res.arrayBuffer();

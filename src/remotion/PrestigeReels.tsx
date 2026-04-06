@@ -1,6 +1,8 @@
 import {
   AbsoluteFill,
+  Audio,
   Img,
+  Sequence,
   Video,
   interpolate,
   useCurrentFrame,
@@ -25,6 +27,10 @@ export type MediaItem = {
   sceneVariant?: SceneVariant;
   /** İngilizce kısa etiket (rozet / split band) */
   categoryLabelEn?: string;
+  /** ElevenLabs TTS — sahne ile senkron (blob veya URL) */
+  audioSrc?: string;
+  /** Gösterim / debug — seslendirme metni */
+  voiceoverText?: string;
 };
 
 /* ─── Aspect ratio tipleri ───────────────────────────────── */
@@ -77,6 +83,11 @@ export type PrestigeReelsProps = {
   agirHasarKayitli?: string;
   plaka?: string;
   ilanTarihi?: string;
+  /**
+   * Seslendirme varsa kesişmeyi önlemek için crossfade kapatılır (sıralı kesim).
+   * `mediaItems` içinde en az bir `audioSrc` varken true verin.
+   */
+  voiceoverSync?: boolean;
 };
 
 /* ─── Zamanlama sabitleri ────────────────────────────────── */
@@ -2800,12 +2811,17 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   agirHasarKayitli,
   plaka,
   ilanTarihi,
+  voiceoverSync = false,
 }) => {
   // aspectRatio verilmişse layout'u ondan türet
   const effectiveLayout: "portrait" | "landscape" =
     aspectRatio ? aspectRatioToLayout(aspectRatio) : layout;
   const frame = useCurrentFrame();
-  const preset = STYLE_PRESETS[reelStyle];
+  const basePreset = STYLE_PRESETS[reelStyle];
+  const preset = {
+    ...basePreset,
+    crossfadeFrames: voiceoverSync ? 0 : basePreset.crossfadeFrames,
+  };
   const safeOutroFrames = Math.max(0, outroFrames);
   const totalFrames = getTotalFrames(mediaItems, { outroFrames: safeOutroFrames, crossfadeFrames: preset.crossfadeFrames });
   const outroStartFrame = totalFrames - safeOutroFrames;
@@ -2853,6 +2869,17 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
           cekis={cekis} garanti={garanti} agirHasarKayitli={agirHasarKayitli} plaka={plaka} ilanTarihi={ilanTarihi}
         />
       ))}
+
+      {mediaItems.map((item, i) => {
+        if (!item.audioSrc) return null;
+        const from = getItemStartFrame(mediaItems, i, preset.crossfadeFrames);
+        const dur = getItemDuration(item);
+        return (
+          <Sequence key={`vo-${i}`} from={from} durationInFrames={dur}>
+            <Audio src={item.audioSrc} />
+          </Sequence>
+        );
+      })}
 
       {/* Geçiş light leak */}
       <LightLeak items={mediaItems} preset={preset} />

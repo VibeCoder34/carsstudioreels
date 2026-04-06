@@ -11,10 +11,53 @@ interface PhotoInput {
   height?: number;
 }
 
+function voiceoverLanguagePreamble(language: "tr" | "en"): string {
+  if (language === "en") {
+    return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
+The field "voiceover_text" on EVERY storyboard shot MUST be written in ENGLISH ONLY — full sentences, natural spoken English.
+TASK A still asks for "comment_tr" in Turkish: that is ONLY for on-screen notes. Do NOT copy Turkish from comment_tr into voiceover_text.
+If voiceover_text contains any Turkish words when English is required, the output is INVALID — rewrite voiceover_text in English.
+
+`;
+  }
+  return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
+The field "voiceover_text" on EVERY storyboard shot MUST be written in TURKISH ONLY — doğal konuşma Türkçesi.
+English category_label_en and comment_tr instructions elsewhere do NOT apply to voiceover_text; voiceover_text stays Turkish.
+
+`;
+}
+
+function voiceoverPromptAppend(language: "tr" | "en"): string {
+  const langLabel = language === "en" ? "English" : "Turkish";
+  const example =
+    language === "en"
+      ? "Low mileage, clean lines, ready to drive."
+      : "Düşük kilometre, temiz hatlar, hazır araç.";
+  const antiMix =
+    language === "en"
+      ? "- Do NOT use Turkish, German, or any non-English text in voiceover_text — even if the car listing data is Turkish."
+      : "- Türkçe dışında dil kullanma; İngilizce label'ları voiceover'a kopyalama.";
+  return `
+
+TASK VOICEOVER — ${langLabel} narration for Text-to-Speech (ElevenLabs)
+For EVERY storyboard shot you MUST include "voiceover_text": the exact spoken script for that shot (same language as above — non-negotiable).
+- Language: ${langLabel} ONLY. Do not mix languages.
+${antiMix}
+- One or two short sentences. Premium dealership / social reel tone.
+- The line must be speakable within duration_frames at natural pacing (~2.0–2.5 words per second). Prefer shorter lines.
+- Narration is strictly sequential in the final edit: the next shot's voiceover starts only after this shot's time ends — write each line as a standalone beat for that shot only.
+- Do not use double-quote characters inside voiceover_text.
+
+OUTPUT: each storyboard object MUST include "voiceover_text" (non-empty string). Example for ${langLabel}:
+"voiceover_text": "${example}"`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const aspectRatio: string = body.aspectRatio ?? "16:9";
+    const voiceoverEnabled = body.voiceover === true;
+    const voiceoverLanguage: "tr" | "en" = body.voiceoverLanguage === "en" ? "en" : "tr";
     const photos: PhotoInput[] = body.photos ?? body.frames?.map((f: { index: number; base64Frames?: string[] }) => ({
       index: f.index,
       base64: f.base64Frames?.[0] ?? "",
@@ -220,7 +263,11 @@ Target ~${clean.length * 180} frames total (~${Math.round(clean.length * 6)} sn)
 NO full_bleed · NO push_horizontal · NO color_wash.
 NO variant repeated > ${maxRepeat} times · NO two consecutive same variant.`;
 
-    const promptText = isPortraitFormat ? portraitPrompt : landscapePrompt;
+    let promptText = isPortraitFormat ? portraitPrompt : landscapePrompt;
+    if (voiceoverEnabled) {
+      promptText = voiceoverLanguagePreamble(voiceoverLanguage) + promptText;
+      promptText += voiceoverPromptAppend(voiceoverLanguage);
+    }
 
     contentBlocks.push({ type: "text", text: promptText });
 
