@@ -128,7 +128,7 @@ function coerceSceneVariant(raw: string): SceneVariant {
  * Claude'un atadığı süreyi ASLA aşağı ölçekleme — süre kısıtı yok.
  * Çok kısa sahne varsa min'e çekeriz, çok uzunsa max'a kıstırırız.
  */
-export function normalizeStoryboardDurations(shots: StoryboardShot[], _targetFrames?: number): void {
+export function normalizeStoryboardDurations(shots: StoryboardShot[]): void {
   if (!shots.length) return;
   for (const s of shots) {
     const min = shotMin(s);
@@ -228,7 +228,7 @@ export function normalizePhotoAnalyzeResult(
   }));
   storyboard = repairStoryboard(storyboard, photoCount);
   dedupeCategoryIds(storyboard);
-  normalizeStoryboardDurations(storyboard, calculateDynamicTarget(photoCount));
+  normalizeStoryboardDurations(storyboard);
   return {
     storyboard,
     editing_notes_tr: String(raw.editing_notes_tr ?? raw.editingNotes ?? ""),

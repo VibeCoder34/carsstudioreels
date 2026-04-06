@@ -20,6 +20,33 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## ElevenLabs (TTS) Integration
+
+This repo includes a server-side Text-to-Speech endpoint backed by ElevenLabs:
+
+- **API route**: `POST /api/tts`
+- **Implementation**: `src/app/api/tts/route.ts`, `src/lib/elevenlabs.ts`
+
+### Required environment variables (local only)
+
+Add these to your `.env.local` (do not commit):
+
+- `ELEVENLABS_API_KEY`: ElevenLabs API key
+- `ELEVENLABS_VOICE_ID`: default voice id (optional)
+- `ELEVENLABS_MODEL_ID`: default model id (optional, e.g. `eleven_multilingual_v2`)
+- `ELEVENLABS_OUTPUT_FORMAT`: default output format (optional, e.g. `mp3_44100_128`)
+
+### Example request
+
+```bash
+curl -X POST "http://localhost:3000/api/tts" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Merhaba! CarStudio Reels için deneme seslendirme.",
+    "outputFormat": "mp3_44100_128"
+  }' --output speech.mp3
+```
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
