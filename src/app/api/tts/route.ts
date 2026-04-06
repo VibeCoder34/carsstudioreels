@@ -1,15 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
-import { elevenLabsTts, getElevenLabsConfig, type ElevenLabsVoiceSettings, type ElevenLabsOutputFormat, type ElevenLabsModelId } from "@/lib/elevenlabs";
+import {
+  elevenLabsTts,
+  getElevenLabsConfig,
+  parseTtsLanguage,
+  resolveModelIdForLanguage,
+  resolveVoiceIdForLanguage,
+  type ElevenLabsVoiceSettings,
+  type ElevenLabsOutputFormat,
+  type ElevenLabsModelId,
+  type TtsLanguage,
+} from "@/lib/elevenlabs";
 
 export const runtime = "nodejs";
 
 type Body = {
   text?: string;
+  /** `"tr"` | `"en"`. Varsayılan: env `ELEVENLABS_DEFAULT_LANGUAGE` veya `tr`. */
+  language?: string;
   voiceId?: string;
   modelId?: ElevenLabsModelId;
   outputFormat?: ElevenLabsOutputFormat;
   voiceSettings?: ElevenLabsVoiceSettings;
 };
+
+export async function GET() {
+  const cfg = getElevenLabsConfig();
+  return NextResponse.json({
+    languages: [
+      { code: "tr" as const, label: "Türkçe" },
+      { code: "en" as const, label: "English" },
+    ],
+    defaultLanguage: cfg.defaultLanguage,
+    envHints: {
+      required: ["ELEVENLABS_API_KEY"],
+      recommended: [
+        "ELEVENLABS_VOICE_ID_TR",
+        "ELEVENLABS_VOICE_ID_EN",
+        "ELEVENLABS_MODEL_ID",
+      ],
+      optional: [
+        "ELEVENLABS_VOICE_ID",
+        "ELEVENLABS_MODEL_ID_TR",
+        "ELEVENLABS_MODEL_ID_EN",
+        "ELEVENLABS_OUTPUT_FORMAT",
+        "ELEVENLABS_DEFAULT_LANGUAGE",
+        "ELEVENLABS_BASE_URL",
+      ],
+    },
+  });
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,9 +56,39 @@ export async function POST(req: NextRequest) {
     const cfg = getElevenLabsConfig();
 
     const text = body.text?.trim() ?? "";
-    const voiceId = (body.voiceId ?? cfg.defaultVoiceId ?? "").trim();
-    const modelId = body.modelId ?? cfg.defaultModelId;
+    let language: TtsLanguage;
+    try {
+      language = body.language !== undefined && body.language !== ""
+        ? parseTtsLanguage(body.language)
+        : cfg.defaultLanguage;
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid language", details: 'Use "tr" or "en".' },
+        { status: 400 }
+      );
+    }
+
+    const voiceFromBody = body.voiceId?.trim();
+    const voiceId =
+      voiceFromBody ||
+      resolveVoiceIdForLanguage(language, cfg) ||
+      "";
+
+    const modelId =
+      body.modelId ?? resolveModelIdForLanguage(language, cfg);
+
     const outputFormat = body.outputFormat ?? cfg.defaultOutputFormat ?? "mp3_44100_128";
+
+    if (!voiceId) {
+      return NextResponse.json(
+        {
+          error: "Missing voice",
+          details:
+            "Set ELEVENLABS_VOICE_ID_TR / ELEVENLABS_VOICE_ID_EN (or ELEVENLABS_VOICE_ID), or pass voiceId in the JSON body.",
+        },
+        { status: 400 }
+      );
+    }
 
     const { audio, contentType } = await elevenLabsTts({
       text,
@@ -29,12 +98,15 @@ export async function POST(req: NextRequest) {
       voiceSettings: body.voiceSettings,
     });
 
+    const filename = `speech-${language}.mp3`;
+
     return new Response(audio, {
       status: 200,
       headers: {
         "Content-Type": contentType,
         "Cache-Control": "no-store",
-        "Content-Disposition": 'inline; filename="speech.mp3"',
+        "Content-Disposition": `inline; filename="${filename}"`,
+        "X-TTS-Language": language,
       },
     });
   } catch (err) {
@@ -42,4 +114,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "TTS failed", details: message }, { status: 500 });
   }
 }
-

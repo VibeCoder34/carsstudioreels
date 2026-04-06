@@ -24,27 +24,50 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 This repo includes a server-side Text-to-Speech endpoint backed by ElevenLabs:
 
-- **API route**: `POST /api/tts`
+- **API route**: `POST /api/tts` (audio mp3), `GET /api/tts` (supported languages + env hints)
 - **Implementation**: `src/app/api/tts/route.ts`, `src/lib/elevenlabs.ts`
 
-### Required environment variables (local only)
+Supported **languages**: **Turkish (`tr`)** and **English (`en`)**. Pick separate voices per language via env for best quality.
 
-Add these to your `.env.local` (do not commit):
+### Environment variables (`.env.local`, do not commit)
 
-- `ELEVENLABS_API_KEY`: ElevenLabs API key
-- `ELEVENLABS_VOICE_ID`: default voice id (optional)
-- `ELEVENLABS_MODEL_ID`: default model id (optional, e.g. `eleven_multilingual_v2`)
-- `ELEVENLABS_OUTPUT_FORMAT`: default output format (optional, e.g. `mp3_44100_128`)
+Copy from `.env.example` and fill in.
 
-### Example request
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ELEVENLABS_API_KEY` | Yes | API key |
+| `ELEVENLABS_VOICE_ID_TR` | Recommended | Voice ID for Turkish |
+| `ELEVENLABS_VOICE_ID_EN` | Recommended | Voice ID for English |
+| `ELEVENLABS_VOICE_ID` | No | Fallback if a language-specific voice is missing |
+| `ELEVENLABS_MODEL_ID` | No | Default model (e.g. `eleven_multilingual_v2`) |
+| `ELEVENLABS_MODEL_ID_TR` / `ELEVENLABS_MODEL_ID_EN` | No | Per-language model override |
+| `ELEVENLABS_DEFAULT_LANGUAGE` | No | `tr` or `en` when request omits `language` (default `tr`) |
+| `ELEVENLABS_OUTPUT_FORMAT` | No | e.g. `mp3_44100_128` |
+
+### Example requests
+
+Turkish:
 
 ```bash
 curl -X POST "http://localhost:3000/api/tts" \
   -H "Content-Type: application/json" \
   -d '{
-    "text": "Merhaba! CarStudio Reels için deneme seslendirme.",
+    "text": "Merhaba! CarStudio Reels için deneme seslendirmesi.",
+    "language": "tr",
     "outputFormat": "mp3_44100_128"
-  }' --output speech.mp3
+  }' --output speech-tr.mp3
+```
+
+English:
+
+```bash
+curl -X POST "http://localhost:3000/api/tts" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hello! This is a CarStudio Reels voice test.",
+    "language": "en",
+    "outputFormat": "mp3_44100_128"
+  }' --output speech-en.mp3
 ```
 
 ## Learn More

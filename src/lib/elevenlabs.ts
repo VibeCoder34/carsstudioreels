@@ -17,6 +17,17 @@ export type ElevenLabsVoiceSettings = {
   use_speaker_boost?: boolean;
 };
 
+/** Desteklenen seslendirme dilleri (yalnızca TR / EN). */
+export type TtsLanguage = "tr" | "en";
+
+export const TTS_LANGUAGES: readonly TtsLanguage[] = ["tr", "en"];
+
+export function parseTtsLanguage(raw: unknown): TtsLanguage {
+  if (raw === "tr" || raw === "en") return raw;
+  if (raw === undefined || raw === null || raw === "") return "tr";
+  throw new Error('Invalid language: use "tr" or "en"');
+}
+
 export type ElevenLabsTtsRequest = {
   text: string;
   voiceId: string;
@@ -35,14 +46,57 @@ function getEnv(name: string): string | undefined {
   return v && v.trim() ? v.trim() : undefined;
 }
 
-export function getElevenLabsConfig() {
+export type ElevenLabsConfig = {
+  apiKey: string | undefined;
+  baseUrl: string;
+  /** Tek voice ile her iki dil (önerilmez); dil bazlı voice yoksa fallback. */
+  defaultVoiceId: string | undefined;
+  voiceIdTr: string | undefined;
+  voiceIdEn: string | undefined;
+  defaultModelId: ElevenLabsModelId | undefined;
+  modelIdTr: ElevenLabsModelId | undefined;
+  modelIdEn: ElevenLabsModelId | undefined;
+  defaultOutputFormat: ElevenLabsOutputFormat | undefined;
+  defaultLanguage: TtsLanguage;
+};
+
+export function getElevenLabsConfig(): ElevenLabsConfig {
   const apiKey = getEnv("ELEVENLABS_API_KEY");
   const baseUrl = getEnv("ELEVENLABS_BASE_URL") ?? "https://api.elevenlabs.io";
   const defaultVoiceId = getEnv("ELEVENLABS_VOICE_ID");
+  const voiceIdTr = getEnv("ELEVENLABS_VOICE_ID_TR");
+  const voiceIdEn = getEnv("ELEVENLABS_VOICE_ID_EN");
   const defaultModelId = getEnv("ELEVENLABS_MODEL_ID") as ElevenLabsModelId | undefined;
+  const modelIdTr = getEnv("ELEVENLABS_MODEL_ID_TR") as ElevenLabsModelId | undefined;
+  const modelIdEn = getEnv("ELEVENLABS_MODEL_ID_EN") as ElevenLabsModelId | undefined;
   const defaultOutputFormat = getEnv("ELEVENLABS_OUTPUT_FORMAT") as ElevenLabsOutputFormat | undefined;
+  const dl = getEnv("ELEVENLABS_DEFAULT_LANGUAGE")?.toLowerCase();
+  const defaultLanguage: TtsLanguage = dl === "en" ? "en" : "tr";
 
-  return { apiKey, baseUrl, defaultVoiceId, defaultModelId, defaultOutputFormat };
+  return {
+    apiKey,
+    baseUrl,
+    defaultVoiceId,
+    voiceIdTr,
+    voiceIdEn,
+    defaultModelId,
+    modelIdTr,
+    modelIdEn,
+    defaultOutputFormat,
+    defaultLanguage,
+  };
+}
+
+/** Dil için voice: önce dil-özel env, sonra genel ELEVENLABS_VOICE_ID. */
+export function resolveVoiceIdForLanguage(lang: TtsLanguage, cfg: ElevenLabsConfig): string | undefined {
+  const specific = lang === "tr" ? cfg.voiceIdTr : cfg.voiceIdEn;
+  return (specific ?? cfg.defaultVoiceId)?.trim() || undefined;
+}
+
+/** Dil için model: önce dil-özel env, sonra ELEVENLABS_MODEL_ID. */
+export function resolveModelIdForLanguage(lang: TtsLanguage, cfg: ElevenLabsConfig): ElevenLabsModelId | undefined {
+  const specific = lang === "tr" ? cfg.modelIdTr : cfg.modelIdEn;
+  return specific ?? cfg.defaultModelId;
 }
 
 export async function elevenLabsTts(req: ElevenLabsTtsRequest): Promise<ElevenLabsTtsResult> {
