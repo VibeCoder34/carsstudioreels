@@ -2,23 +2,35 @@
 
 const MAX_PX = 1024;
 
-/** Görüntü dosyasını sıkıştırılmış base64 JPEG'e dönüştürür */
-export async function imageFileToBase64(file: File): Promise<string> {
+export interface ImageData {
+  base64: string;
+  width: number;
+  height: number;
+}
+
+/** Görüntü dosyasını sıkıştırılmış base64 JPEG'e dönüştürür; orijinal boyutları da döner */
+export async function imageFileToBase64(file: File): Promise<ImageData> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
 
     img.onload = () => {
+      const originalWidth = img.width;
+      const originalHeight = img.height;
       const ratio = Math.min(MAX_PX / img.width, MAX_PX / img.height, 1);
       const canvas = document.createElement("canvas");
       canvas.width = Math.round(img.width * ratio);
       canvas.height = Math.round(img.height * ratio);
       canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL("image/jpeg", 0.82).split(",")[1]);
+      resolve({
+        base64: canvas.toDataURL("image/jpeg", 0.82).split(",")[1],
+        width: originalWidth,
+        height: originalHeight,
+      });
       URL.revokeObjectURL(url);
     };
 
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(""); };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve({ base64: "", width: 0, height: 0 }); };
     img.src = url;
   });
 }

@@ -7,11 +7,14 @@ const client = new Anthropic();
 interface PhotoInput {
   index: number;
   base64: string;
+  width?: number;
+  height?: number;
 }
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const aspectRatio: string = body.aspectRatio ?? "16:9";
     const photos: PhotoInput[] = body.photos ?? body.frames?.map((f: { index: number; base64Frames?: string[] }) => ({
       index: f.index,
       base64: f.base64Frames?.[0] ?? "",
@@ -37,83 +40,115 @@ export async function POST(req: NextRequest) {
 
     const fixedList = FIXED_CATEGORY_IDS.join('", "');
 
-    const promptText = `You are an expert automotive listing photo analyst and video storyboard director.
+    const photoDimLines = clean.map((p) => {
+      if (p.width && p.height) {
+        const arFloat = (p.width / p.height).toFixed(2);
+        const orient = p.width > p.height ? "landscape" : p.width < p.height ? "portrait" : "square";
+        return `  Photo ${p.index}: ${p.width}×${p.height} (AR ${arFloat}, ${orient})`;
+      }
+      return `  Photo ${p.index}: unknown dimensions`;
+    }).join("\n");
 
-INPUT: ${clean.length} car photos (JPEG). Each is labeled with its index (0-based).
+    const maxRepeat = Math.max(2, Math.ceil(clean.length / 5));
 
-TASK A — For EVERY photo, write a short critique in Turkish (comment_tr): composition, lighting, sharpness, suitability for a premium horizontal (16:9) showcase video.
+    const promptText = `You are a premium automotive video storyboard director.
 
-TASK B — Assign exactly ONE unique category_id per photo. Rules:
-1) PREFER these fixed English snake_case ids when the photo clearly matches (use each at most ONCE across all photos):
-   "${fixedList}"
-2) If a photo does not fit any fixed slot, invent a specific English snake_case id (e.g. fender, mirror, badge, undercarriage).
-3) If more photos remain than fixed slots, EVERY extra photo MUST get its OWN distinct dynamic category_id (never reuse an id for two photos).
-4) If one photo clearly shows two regions (e.g. front + side), create ONE new combined English id like "front_left_corner" (still unique).
-5) category_label_en: short human-readable English label for on-screen display.
+INPUT: ${clean.length} car photos (JPEG, indexed 0-based).
+OUTPUT VIDEO FORMAT: ${aspectRatio}
+PHOTO DIMENSIONS:
+${photoDimLines}
 
-TASK C — Build storyboard order AND scene rhythm. Follow this arc for a compelling car commercial feel:
-  ACT 1 — HOOK (shots 1–2): Strong exterior opener. Use "ken_zoom_slow" or "slide_entry_left" for the hero shot. Fast — 80–100 frames. Create immediate impact.
-  ACT 2 — TOUR (shots 3–5): Flow around the car (front → side → rear or similar logical path). Mix "full_bleed", "push_horizontal", "color_wash". 70–100 frames each. Keep energy up.
-  ACT 3 — SHOWCASE (shots 5–8): This is the heart. Use layout variants that give designed, editorial feel:
-    • Use "duo_split" for complementary pairs (e.g., front + rear, left + right exterior, exterior + detail)
-    • Use "trio_mosaic" once to show multiple angles simultaneously — great mid-video montage moment
-    • Use "card_panel" for engine, cockpit, or wheel shots WITH their spec data
-    • Use "letter_box" for a wide dramatic exterior shot
-    Assign 130–200 frames for these.
-  ACT 4 — CLIMAX (last 2 shots before outro): Use "feature_hero" for the big performans reveal (engine or best exterior). Then "letter_box" or "split_band" for the final shot before outro. 150–200 frames.
+━━━ NON-NEGOTIABLE RULES ━━━
+1. Every shot: photo occupies ≤ 55% of screen. The rest = typography + data.
+2. "full_bleed", "push_horizontal", "color_wash" are FORBIDDEN.
+3. Photos are NEVER cropped — always displayed with objectFit:contain on a dark background.
+4. VARIETY IS MANDATORY: No scene_variant may appear more than ${maxRepeat} times total.
+   "framed_center" and "listing_panel" may each appear at most ${maxRepeat} times — not more.
+5. NO two consecutive shots may use the same scene_variant.
+6. Use PHOTO DIMENSIONS to choose the best layout:
+   - Photo AR ≈ output AR → "framed_center" or "letter_box"
+   - Photo landscape, output portrait → "listing_panel" or "editorial_right"
+   - Photo portrait, output landscape → "framed_center" or "card_panel"
+   - Photo square → any layout, avoid repeating the same as prior shot
+━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  RHYTHM RULES:
-  - Never place 3 consecutive full_bleed shots
-  - Vary between fast (60–90f) and slow (150–200f) to create pulse
-  - Place "duo_split" and "trio_mosaic" in the middle third of the video
-  - End strong: feature_hero or letter_box before outro
+WHAT EACH VARIANT DISPLAYS (each one shows a DIFFERENT slice of car data — variety is mandatory):
+• "framed_center"   → Marka + Seri + Model + Yıl + Araç Durumu + Fiyat + Motor·KM·Kasa özeti
+• "listing_panel"   → KM + Vites + Yakıt + Kasa (pratik kullanım bilgileri)
+• "editorial_right" / "editorial_left" → Marka büyük + Motor Gücü + Çekiş + Renk + Fiyat
+• "split_specs"     → KM + Motor Gücü + Motor Hacmi + Fiyat (motor odaklı)
+• "card_panel"      → Motor Gücü / Motor Hacmi / Çekiş / Yakıt / Vites / KM tablosu
+• "side_table"      → Kategori bazlı spec tablosu (tekerlek / kokpit / motor)
+• "floating_card"   → İlan Tarihi + Araç Durumu + Garanti + Ağır Hasar Kayıtlı + Plaka + Renk
+• "letter_box"      → Sinematik geniş çerçeve + marka barları
+• "feature_hero"    → Performans: HP / Nm / 0-100 (CLIMAX)
+• "duo_split"       → İki fotoğraf yan yana (KARŞILAŞTIRMA)
+• "trio_mosaic"     → 1 büyük + 2 küçük fotoğraf (MONTAJ)
+• "split_band"      → Profil görüntüsü + kategori bandı
+• "callout"         → Altın nokta + etiket balonu (DETAY)
+• "spec_table"      → Animasyonlu overlay tablo
 
-TASK D — Duration: target total CONTENT duration ~36–42 seconds at 30fps BEFORE outro (roughly 1080–1260 frames total for all shots combined). Split duration_frames across storyboard shots accordingly. Rules:
-   - Regular shots (full_bleed, slide_entry_*, push_horizontal, color_wash, split_band, ken_zoom_slow, callout): 60–120 frames each.
-   - Layout shots (card_panel, letter_box, feature_hero): 150–220 frames each — these show data, viewers need time to read.
-   - Hero opener shot: 90–150 frames.
-   - Each shot: minimum 60 frames, maximum 240 frames.
+TASK A — For EVERY photo, write a short critique in Turkish (comment_tr).
 
-TASK E — scene_variant per shot (English, one of):
-   "full_bleed" | "slide_entry_left" | "slide_entry_right" | "push_horizontal" | "color_wash" | "split_band" | "ken_zoom_slow" | "callout" | "card_panel" | "letter_box" | "feature_hero"
+TASK B — Assign exactly ONE unique category_id per photo:
+1) Prefer fixed ids (use each max once): "${fixedList}"
+2) Otherwise invent a specific English snake_case id.
+3) category_label_en: short English label for display.
 
-   PREMIUM LAYOUT VARIANTS — these give a designed, editorial feel (photo is NOT full-screen):
-   - "card_panel": Photo sits as a padded card with rounded corners on the LEFT side of a dark background. Data table on the RIGHT. Auto-selects by category: engine→HP/torque/0-100 bars, cockpit→feature checklist, tire/wheel→brake specs, exterior→dimensions. Best for: engine, cockpit, wheel, profile shots. Assign 150–220 frames. Use 2–3 times.
-   - "letter_box": Cinematic letterbox — photo fills full width but only CENTER 66% of height. Top dark bar: category label. Bottom dark bar: brand / model / year / price as animated stats. Great for wide exterior shots, panoramic views. Assign 100–160 frames. Use 1–2 times.
-   - "feature_hero": Large rounded photo card in upper 60%. Below: 3 huge gold stats (190 HP · 400 Nm · 7.2 sn) animate in dramatically. Best for the engine or the big exterior reveal before outro. Assign 150–200 frames. Use once, ideally near the end.
+TASK C — Narrative arc with MAXIMUM VARIETY:
+  SHOT 1: Hook. "framed_center". 150–180 frames.
+  SHOT 2: "listing_panel" (shows KM/Motor/Renk/Vites — completely different data). 150–180 frames.
+  SHOT 3: "editorial_right" or "editorial_left" (brand identity). 150–200 frames.
+  SHOT 4: "card_panel" or "side_table" (spec table). 180–240 frames.
+  SHOT 5: "split_specs" or "split_band". 150–200 frames.
+  SHOT 6: "letter_box" (cinematic wide). 180–240 frames.
+  SHOT 7: "duo_split" (pair comparison). 180–240 frames.
+  SHOT 8: "trio_mosaic" (montage). 180–240 frames.
+  SHOT 9+: Rotate freely through all remaining variants, no consecutive repeats.
+  SECOND TO LAST: "spec_table" or "split_specs". 180–240 frames.
+  LAST: "feature_hero" (performance climax). 210–300 frames.
+  For ${clean.length} < 9 photos, skip slots in order but keep the same principle.
 
-   MOTION VARIANTS — for regular full-screen shots:
-   - "full_bleed": Standard Ken Burns. Default.
-   - "slide_entry_left" / "slide_entry_right": Slide in from that side.
-   - "push_horizontal": Horizontal push pan.
-   - "color_wash": Subtle color pulse. Good for moody exterior shots.
-   - "split_band": Photo top 72%, bottom band shows category label. Profile shots.
-   - "ken_zoom_slow": Very slow majestic zoom. Hero shots.
-   - "callout": Full-bleed + pulsing gold dot + line + label bubble. Detail close-ups only (badge, headlight, wheel detail). Assign 80–120 frames.
-   - "duo_split": TWO photos side by side as cards on dark background. This shot shows items[index] AND items[index+1] simultaneously. Use for complementary angle pairs: front+rear, left+right, exterior+detail. Assign 130–160 frames. Use 1–2 times.
-   - "trio_mosaic": ONE large photo (left 63%) + TWO small photos stacked (right 37%) as cards. Shows items[index], [index+1], [index+2] simultaneously. Great for a mid-video "montage moment" showing multiple exterior angles at once. Assign 150–180 frames. Use once.
+TASK D — Duration per shot:
+  "framed_center", "listing_panel": 150–210 frames  (~5–7 sn)
+  "editorial_right", "editorial_left": 150–210 frames  (~5–7 sn)
+  "card_panel", "side_table", "letter_box", "feature_hero": 210–300 frames  (~7–10 sn)
+  "duo_split", "trio_mosaic": 180–270 frames  (~6–9 sn)
+  "split_specs", "split_band": 120–180 frames  (~4–6 sn)
+  "spec_table", "floating_card": 150–210 frames
+  "callout": 90–120 frames
+  Min 90 frames (3 sn), max 360 frames (12 sn).
 
-Also set quality_score (1-10), lighting: "excellent"|"good"|"average"|"poor".
+TASK E — scene_variant assignment rules summary:
+  • "callout" → only for close-up details (badge, headlight, wheel center cap)
+  • "split_band" → only for clean profile/side shots
+  • "duo_split" → use exactly 1 time; pick adjacent or complementary photos
+  • "trio_mosaic" → use exactly 1 time (mid-video)
+  • "feature_hero" → use exactly 1 time (last shot ideally)
+  • Everything else → spread freely, no consecutive duplicates
 
-OUTPUT: ONLY valid JSON (no markdown):
+Also set quality_score (1–10), lighting: "excellent"|"good"|"average"|"poor".
+
+OUTPUT — ONLY valid JSON, no markdown:
 {
-  "storyboard": [
-    {
-      "source_index": 0,
-      "category_id": "front",
-      "category_label_en": "Front",
-      "comment_tr": "Türkçe yorum",
-      "quality_score": 8,
-      "lighting": "good",
-      "duration_frames": 120,
-      "scene_variant": "slide_entry_left"
-    }
-  ],
+  "storyboard": [{
+    "source_index": 0,
+    "category_id": "front",
+    "category_label_en": "Front",
+    "comment_tr": "Türkçe yorum",
+    "quality_score": 8,
+    "lighting": "good",
+    "duration_frames": 180,
+    "scene_variant": "framed_center"
+  }],
   "editing_notes_tr": "Kısa Türkçe genel kurgu notu",
   "outro_frames": 90
 }
 
-The storyboard array MUST include exactly one entry per photo index (${clean.length} entries). Each source_index must appear exactly once. Sum of duration_frames should land near 1080–1260 for ~36–42s content before outro. Data overlay shots (spec_table, side_table, split_specs, floating_card) must have duration_frames ≥ 150.`;
+MUST: exactly ${clean.length} entries, each source_index once.
+Target ~${clean.length * 180} frames total (~${Math.round(clean.length * 6)} sn).
+NO full_bleed · NO push_horizontal · NO color_wash.
+NO variant repeated > ${maxRepeat} times · NO two consecutive same variant.`;
 
     contentBlocks.push({ type: "text", text: promptText });
 

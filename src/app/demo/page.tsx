@@ -12,9 +12,12 @@ import {
   PrestigeReels,
   getTotalFrames,
   STYLE_PRESETS,
+  ASPECT_RATIO_DIMENSIONS,
+  aspectRatioToLayout,
   type MediaItem,
   type ReelStyle,
   type StylePreset,
+  type AspectRatioOption,
 } from "@/remotion/PrestigeReels";
 import { imageFileToBase64 } from "@/lib/frameExtractor";
 import {
@@ -24,8 +27,10 @@ import {
 } from "@/lib/photoCategories";
 import {
   normalizePhotoAnalyzeResult,
+  getFlowRecommendation,
   type PhotoAnalyzeResult,
   type StoryboardShot,
+  type FlowRecommendation,
 } from "@/lib/storyboard";
 
 const Player = dynamic(
@@ -58,6 +63,21 @@ interface FormData {
   year: string;
   price: string;
   ctaPhone: string;
+  km: string;
+  motor: string;
+  renk: string;
+  vites: string;
+  yakit: string;
+  kasa: string;
+  seri: string;
+  aracDurumu: string;
+  motorGucu: string;
+  motorHacmi: string;
+  cekis: string;
+  garanti: string;
+  agirHasarKayitli: string;
+  plaka: string;
+  ilanTarihi: string;
 }
 
 function categoryTitleTr(shot: StoryboardShot): string {
@@ -76,14 +96,29 @@ export default function DemoPage() {
   const [analysisResult, setAnalysisResult] = useState<PhotoAnalyzeResult | null>(null);
   const [analyzePhase, setAnalyzePhase] = useState("");
   const [analyzeError, setAnalyzeError] = useState("");
-  const [layout, setLayout] = useState<"portrait" | "landscape">("landscape");
+  const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>("16:9");
   const [outroFrames, setOutroFrames] = useState<number>(90);
   const [form, setForm] = useState<FormData>({
     carBrand: "BMW",
-    carModel: "5 Serisi 530i xDrive",
-    year: "2024",
-    price: "₺2.850.000",
+    carModel: "320Ci",
+    year: "2003",
+    price: "₺485.000",
     ctaPhone: "0532 123 45 67",
+    km: "236.300 km",
+    motor: "2.2L Benzin",
+    renk: "Mavi",
+    vites: "Otomatik",
+    yakit: "Benzin & LPG",
+    kasa: "Coupe",
+    seri: "3 Serisi",
+    aracDurumu: "İkinci El",
+    motorGucu: "170 HP",
+    motorHacmi: "2171 cc",
+    cekis: "Arkadan İtiş",
+    garanti: "Hayır",
+    agirHasarKayitli: "Hayır",
+    plaka: "TR Plakalı",
+    ilanTarihi: "30 Mart 2026",
   });
   const [reelStyle, setReelStyle] = useState<ReelStyle>("cinematic");
   const [isDragging, setIsDragging] = useState(false);
@@ -116,17 +151,17 @@ export default function DemoPage() {
     try {
       setAnalyzePhase("Fotoğraflar hazırlanıyor...");
       const photos = await Promise.all(
-        files.map(async (file, i) => ({
-          index: i,
-          base64: await imageFileToBase64(file),
-        }))
+        files.map(async (file, i) => {
+          const { base64, width, height } = await imageFileToBase64(file);
+          return { index: i, base64, width, height };
+        })
       );
 
       setAnalyzePhase("AI fotoğrafları sınıflandırıyor ve kurguyu yazıyor...");
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos }),
+        body: JSON.stringify({ photos, aspectRatio }),
       });
 
       if (!res.ok) {
@@ -156,7 +191,6 @@ export default function DemoPage() {
       setMediaItems(ordered);
       setAnalysisResult(result);
       setOutroFrames(result.outro_frames);
-      setLayout("landscape");
       setStep("preview");
     } catch (err) {
       console.error(err);
@@ -168,6 +202,11 @@ export default function DemoPage() {
   const totalFrames = useMemo(
     () => getTotalFrames(mediaItems, { outroFrames, crossfadeFrames: STYLE_PRESETS[reelStyle].crossfadeFrames }),
     [mediaItems, outroFrames, reelStyle]
+  );
+
+  const flowRec = useMemo<FlowRecommendation | null>(
+    () => files.length > 0 ? getFlowRecommendation(files.length) : null,
+    [files.length]
   );
 
   return (
@@ -227,9 +266,10 @@ export default function DemoPage() {
             form={form}
             fileInputRef={fileInputRef}
             error={analyzeError}
-            layout={layout}
+            aspectRatio={aspectRatio}
             reelStyle={reelStyle}
-            onLayoutChange={setLayout}
+            flowRec={flowRec}
+            onAspectRatioChange={setAspectRatio}
             onStyleChange={setReelStyle}
             onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
             onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -251,7 +291,7 @@ export default function DemoPage() {
             form={form}
             totalFrames={totalFrames}
             analysisResult={analysisResult}
-            layout={layout}
+            aspectRatio={aspectRatio}
             outroFrames={outroFrames}
             reelStyle={reelStyle}
             onReset={() => {
@@ -270,10 +310,18 @@ export default function DemoPage() {
 
 /* ─── Upload adımı ───────────────────────────────────────── */
 
+const ASPECT_RATIO_OPTIONS: { value: AspectRatioOption; label: string; sub: string; icon: string }[] = [
+  { value: "16:9", label: "16:9", sub: "Yatay",   icon: "▬" },
+  { value: "9:16", label: "9:16", sub: "Dikey",   icon: "▯" },
+  { value: "1:1",  label: "1:1",  sub: "Kare",    icon: "▪" },
+  { value: "4:3",  label: "4:3",  sub: "Klasik",  icon: "▭" },
+  { value: "3:4",  label: "3:4",  sub: "Dikey+",  icon: "▮" },
+];
+
 function UploadStep({
   mediaItems, isDragging, form, fileInputRef, error,
-  layout, reelStyle,
-  onLayoutChange, onStyleChange,
+  aspectRatio, reelStyle, flowRec,
+  onAspectRatioChange, onStyleChange,
   onDrop, onDragOver, onDragLeave, onFileChange,
   onRemoveItem, onFormChange, onAnalyze,
 }: {
@@ -282,9 +330,10 @@ function UploadStep({
   form: FormData;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   error: string;
-  layout: "portrait" | "landscape";
+  aspectRatio: AspectRatioOption;
   reelStyle: ReelStyle;
-  onLayoutChange: (layout: "portrait" | "landscape") => void;
+  flowRec: FlowRecommendation | null;
+  onAspectRatioChange: (ar: AspectRatioOption) => void;
   onStyleChange: (style: ReelStyle) => void;
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -295,6 +344,7 @@ function UploadStep({
   onAnalyze: () => void;
 }) {
   const hasMedia = mediaItems.length > 0;
+  const arDims = ASPECT_RATIO_DIMENSIONS[aspectRatio];
 
   return (
     <>
@@ -303,31 +353,13 @@ function UploadStep({
           <div className="min-w-0">
             <h1 className="text-lg sm:text-xl font-bold tracking-tight text-[var(--foreground)]">Projelerim</h1>
             <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
-              {mediaItems.length} fotoğraf · Yatay 16:9 öncelikli
+              {mediaItems.length} fotoğraf · {aspectRatio} ({arDims.width}×{arDims.height})
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button type="button" className="btn-pill-primary text-sm whitespace-nowrap" disabled title="Yakında">
               + Kredi satın al
             </button>
-            <div className="segmented" role="group" aria-label="Çıktı formatı">
-              <button
-                type="button"
-                className="segmented-item"
-                data-active={layout === "landscape" ? "true" : "false"}
-                onClick={() => onLayoutChange("landscape")}
-              >
-                Yatay 16:9
-              </button>
-              <button
-                type="button"
-                className="segmented-item"
-                data-active={layout === "portrait" ? "true" : "false"}
-                onClick={() => onLayoutChange("portrait")}
-              >
-                Dikey 9:16
-              </button>
-            </div>
           </div>
         </div>
         <div className="max-w-6xl mx-auto mt-4 relative">
@@ -356,6 +388,54 @@ function UploadStep({
                 Sinematik · Ken Burns · CTA outro
               </span>
             </div>
+
+            {/* Format seçici */}
+            <div className="demo-card p-4 space-y-3">
+              <div className="demo-section-label">Çıktı formatı</div>
+              <div className="grid grid-cols-5 gap-2">
+                {ASPECT_RATIO_OPTIONS.map((opt) => {
+                  const active = aspectRatio === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => onAspectRatioChange(opt.value)}
+                      className={`flex flex-col items-center gap-1 p-2 rounded-[var(--radius)] border text-center transition-all ${
+                        active
+                          ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
+                          : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
+                      }`}
+                    >
+                      <span className="text-base leading-none">{opt.icon}</span>
+                      <span className={`text-xs font-bold ${active ? "text-[var(--primary)]" : ""}`}>{opt.label}</span>
+                      <span className="text-[9px] text-[var(--muted-foreground)]">{opt.sub}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {(aspectRatio === "9:16" || aspectRatio === "3:4" || aspectRatio === "1:1") && (
+                <p className="text-[10px] text-[var(--muted-foreground)]">
+                  Yatay fotoğraflar otomatik bulanık arka plan ile gösterilir.
+                </p>
+              )}
+            </div>
+
+            {/* Akış önerisi / uyarı */}
+            {flowRec?.warning && (
+              <div className={`rounded-[var(--radius)] border px-4 py-3 text-sm ${
+                flowRec.mode === "fast_sequence"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "border-[var(--primary)]/30 bg-[var(--primary)]/8 text-[var(--primary)]"
+              }`}>
+                <div className="font-semibold mb-0.5">
+                  {flowRec.mode === "fast_sequence" ? "Çok fazla fotoğraf" : "Uzun video modu"}
+                </div>
+                <p className="text-[12px] leading-snug opacity-90">{flowRec.warning}</p>
+                {flowRec.suggestion && (
+                  <p className="text-[11px] leading-snug mt-1 opacity-75">{flowRec.suggestion}</p>
+                )}
+              </div>
+            )}
 
             {error && (
               <div className="rounded-[var(--radius)] border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm text-[var(--destructive)]">
@@ -442,6 +522,37 @@ function UploadStep({
                       value={form[field]}
                       onChange={(e) => onFormChange(field, e.target.value)}
                       className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/20 focus:border-[var(--ring)]"
+                    />
+                  </div>
+                ))}
+              </div>
+              {/* Teknik & ilan detayları */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                {(
+                  [
+                    ["seri",             "Seri",              "3 Serisi"],
+                    ["km",               "KM",                "236.300 km"],
+                    ["motorGucu",        "Motor Gücü",        "170 HP"],
+                    ["motorHacmi",       "Motor Hacmi",       "2171 cc"],
+                    ["vites",            "Vites",             "Otomatik"],
+                    ["yakit",            "Yakıt Tipi",        "Benzin & LPG"],
+                    ["kasa",             "Kasa Tipi",         "Coupe"],
+                    ["renk",             "Renk",              "Mavi"],
+                    ["cekis",            "Çekiş",             "Arkadan İtiş"],
+                    ["aracDurumu",       "Araç Durumu",       "İkinci El"],
+                    ["garanti",          "Garanti",           "Hayır"],
+                    ["agirHasarKayitli", "Ağır Hasar",        "Hayır"],
+                    ["plaka",            "Plaka / Uyruk",     "TR Plakalı"],
+                    ["ilanTarihi",       "İlan Tarihi",       "30 Mart 2026"],
+                  ] as [keyof FormData, string, string][]
+                ).map(([field, label, placeholder]) => (
+                  <div key={field}>
+                    <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">{label}</label>
+                    <input
+                      value={form[field]}
+                      onChange={(e) => onFormChange(field, e.target.value)}
+                      className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/20 focus:border-[var(--ring)]"
+                      placeholder={placeholder}
                     />
                   </div>
                 ))}
@@ -580,20 +691,22 @@ function AnalyzingStep({ mediaItems, phase }: { mediaItems: MediaItem[]; phase: 
 /* ─── Preview adımı ──────────────────────────────────────── */
 
 function PreviewStep({
-  mediaItems, form, totalFrames, analysisResult, layout, outroFrames, reelStyle, onReset,
+  mediaItems, form, totalFrames, analysisResult, aspectRatio, outroFrames, reelStyle, onReset,
 }: {
   mediaItems: MediaItem[];
   form: FormData;
   totalFrames: number;
   analysisResult: PhotoAnalyzeResult | null;
-  layout: "portrait" | "landscape";
+  aspectRatio: AspectRatioOption;
   outroFrames: number;
   reelStyle: ReelStyle;
   onReset: () => void;
 }) {
   const durationSec = (totalFrames / FPS).toFixed(1);
-  const compWidth = layout === "landscape" ? 1920 : 1080;
-  const compHeight = layout === "landscape" ? 1080 : 1920;
+  const dims = ASPECT_RATIO_DIMENSIONS[aspectRatio];
+  const compWidth = dims.width;
+  const compHeight = dims.height;
+  const layout = aspectRatioToLayout(aspectRatio);
   const storyboard = analysisResult?.storyboard ?? [];
 
   return (
@@ -609,7 +722,7 @@ function PreviewStep({
             {form.carBrand} {form.carModel}
           </h2>
           <p className="text-[var(--muted-foreground)] text-sm mt-1">
-            {mediaItems.length} sahne · ~{durationSec} sn · {layout === "landscape" ? "16:9 yatay" : "9:16 dikey"}
+            {mediaItems.length} sahne · ~{durationSec} sn · {aspectRatio} ({compWidth}×{compHeight})
           </p>
         </div>
 
@@ -620,7 +733,7 @@ function PreviewStep({
               <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/20 to-transparent rounded-2xl blur-3xl -z-10 scale-105" />
               <div
                 className="relative rounded-xl overflow-hidden bg-black border border-[var(--border)] shadow-2xl shadow-black/30"
-                style={{ aspectRatio: layout === "landscape" ? "16/9" : "9/16" }}
+                style={{ aspectRatio: `${compWidth}/${compHeight}` }}
               >
                 <Player
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -641,7 +754,23 @@ function PreviewStep({
                     price: form.price,
                     galleryName: "CarStudio",
                     ctaPhone: form.ctaPhone || undefined,
+                    km: form.km || undefined,
+                    motor: form.motor || undefined,
+                    renk: form.renk || undefined,
+                    vites: form.vites || undefined,
+                    yakit: form.yakit || undefined,
+                    kasa: form.kasa || undefined,
+                    seri: form.seri || undefined,
+                    aracDurumu: form.aracDurumu || undefined,
+                    motorGucu: form.motorGucu || undefined,
+                    motorHacmi: form.motorHacmi || undefined,
+                    cekis: form.cekis || undefined,
+                    garanti: form.garanti || undefined,
+                    agirHasarKayitli: form.agirHasarKayitli || undefined,
+                    plaka: form.plaka || undefined,
+                    ilanTarihi: form.ilanTarihi || undefined,
                     layout,
+                    aspectRatio,
                     outroFrames,
                     reelStyle,
                   }}
@@ -707,7 +836,14 @@ function PreviewStep({
             <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4">
               <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Uygun platformlar</div>
               <div className="flex flex-wrap gap-2">
-                {["YouTube (16:9)", "Web / galeri", "LinkedIn"].map((p) => (
+                {(aspectRatio === "9:16" || aspectRatio === "3:4"
+                  ? ["TikTok", "Instagram Reels", "YouTube Shorts"]
+                  : aspectRatio === "1:1"
+                  ? ["Instagram Kare", "LinkedIn", "Web / galeri"]
+                  : aspectRatio === "4:3"
+                  ? ["Facebook", "Web / galeri", "Sunum"]
+                  : ["YouTube (16:9)", "Web / galeri", "LinkedIn"]
+                ).map((p) => (
                   <span key={p} className="text-[11px] bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)] px-3 py-1.5 rounded-full">
                     {p}
                   </span>

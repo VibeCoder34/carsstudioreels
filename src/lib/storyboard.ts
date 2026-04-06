@@ -21,19 +21,80 @@ export interface PhotoAnalyzeResult {
   outro_frames: number;
 }
 
-/** İçerik süresi hedefi (~36 sn @ 30fps); toplam video outro ile ~39 sn olur */
-export const TARGET_CONTENT_FRAMES = 1080;
-export const MIN_SHOT_FRAMES = 60;   // normal shot minimum — 2 sn
-export const MAX_SHOT_FRAMES = 210;
+/** Fotoğraf başına minimum/maksimum süre (çerçeve) */
+export const MIN_FRAMES_PER_PHOTO = 90;   // 3.0 sn @ 30fps
+export const MAX_FRAMES_PER_PHOTO = 180;  // 6.0 sn @ 30fps
 
-/** Layout variantları daha uzun tutulur — okumak için zaman lazım */
+export const MIN_SHOT_FRAMES = MIN_FRAMES_PER_PHOTO;
+export const MAX_SHOT_FRAMES = MAX_FRAMES_PER_PHOTO;
+
+/** Layout variantları daha uzun tutulur — metinleri okumak için zaman lazım */
 const DATA_VARIANTS = new Set([
   "spec_table", "side_table", "split_specs", "floating_card",
   "card_panel", "letter_box", "feature_hero",
   "duo_split", "trio_mosaic",
+  "framed_center", "listing_panel", "editorial_right", "editorial_left",
 ]);
 const MIN_DATA_FRAMES = 150;  // 5 sn minimum
-const MAX_DATA_FRAMES = 300;  // 10 sn maximum
+const MAX_DATA_FRAMES = 360;  // 12 sn maximum
+
+/**
+ * Fotoğraf sayısına göre dinamik içerik süresi hedefi.
+ * Her fotoğraf 3 saniye (90 çerçeve) alır.
+ * 15'ten fazla fotoğraf varsa geçişleri hızlandırmak yerine videoyu uzatırız.
+ */
+export function calculateDynamicTarget(photoCount: number): number {
+  return Math.max(photoCount, 1) * MAX_FRAMES_PER_PHOTO;
+}
+
+export type FlowMode = "standard" | "fast_sequence";
+
+export interface FlowRecommendation {
+  mode: FlowMode;
+  totalContentSeconds: number;
+  perPhotoSeconds: number;
+  warning?: string;
+  suggestion?: string;
+}
+
+/**
+ * Fotoğraf sayısı ve isteğe bağlı sabit süreye göre akış önerisi döndürür.
+ * @param photoCount - Yüklenen fotoğraf sayısı
+ * @param fixedTotalSec - Kullanıcının belirlediği sabit süre (sn), opsiyonel
+ */
+export function getFlowRecommendation(
+  photoCount: number,
+  fixedTotalSec?: number
+): FlowRecommendation {
+  const minPerSec = MIN_FRAMES_PER_PHOTO / 30; // 3.0s
+  const maxPerSec = MAX_FRAMES_PER_PHOTO / 30; // 6.0s
+
+  if (!fixedTotalSec || fixedTotalSec <= 0) {
+    // Serbest mod: her fotoğrafa 5 saniye (metin okunma süresi)
+    const totalSec = (photoCount * MIN_DATA_FRAMES) / 30;
+    const warning =
+      photoCount > 20
+        ? `${photoCount} fotoğraf ile içerik süresi ~${totalSec.toFixed(0)} saniye olacak.`
+        : undefined;
+    return { mode: "standard", totalContentSeconds: totalSec, perPhotoSeconds: maxPerSec, warning };
+  }
+
+  const perPhotoSec = fixedTotalSec / photoCount;
+
+  if (perPhotoSec < minPerSec) {
+    const maxPhotos = Math.floor(fixedTotalSec / minPerSec);
+    const excess = photoCount - maxPhotos;
+    return {
+      mode: "fast_sequence",
+      totalContentSeconds: fixedTotalSec,
+      perPhotoSeconds: minPerSec,
+      warning: `${photoCount} fotoğraf ${fixedTotalSec}sn'ye sığmıyor (fotoğraf başı ${perPhotoSec.toFixed(1)}sn gerekir, min 1.5sn).`,
+      suggestion: `${excess} düşük kaliteli/benzer fotoğrafı çıkarın (maks ${maxPhotos} fotoğraf) ya da hızlı sekans moduna geçin.`,
+    };
+  }
+
+  return { mode: "standard", totalContentSeconds: fixedTotalSec, perPhotoSeconds: Math.min(perPhotoSec, maxPerSec) };
+}
 
 function shotMin(s: StoryboardShot): number {
   return DATA_VARIANTS.has(s.scene_variant) ? MIN_DATA_FRAMES : MIN_SHOT_FRAMES;
@@ -63,34 +124,16 @@ function coerceSceneVariant(raw: string): SceneVariant {
 }
 
 /**
- * Süreleri oransal ölçekleyerek TARGET_CONTENT_FRAMES'e yakınsatır.
+ * Her sahnenin süresini min/max sınırlarına kıstırır.
+ * Claude'un atadığı süreyi ASLA aşağı ölçekleme — süre kısıtı yok.
+ * Çok kısa sahne varsa min'e çekeriz, çok uzunsa max'a kıstırırız.
  */
-export function normalizeStoryboardDurations(shots: StoryboardShot[]): void {
+export function normalizeStoryboardDurations(shots: StoryboardShot[], _targetFrames?: number): void {
   if (!shots.length) return;
-  const sum = shots.reduce((a, s) => a + Math.max(1, s.duration_frames), 0);
-  if (sum <= 0) return;
-  const scale = TARGET_CONTENT_FRAMES / sum;
   for (const s of shots) {
     const min = shotMin(s);
     const max = shotMax(s);
-    s.duration_frames = Math.round(Math.max(1, s.duration_frames) * scale);
-    s.duration_frames = Math.min(max, Math.max(min, s.duration_frames));
-  }
-  const total = shots.reduce((a, s) => a + s.duration_frames, 0);
-  let drift = TARGET_CONTENT_FRAMES - total;
-  let i = 0;
-  while (drift !== 0 && i < shots.length * 4) {
-    const idx = i % shots.length;
-    const min = shotMin(shots[idx]);
-    const max = shotMax(shots[idx]);
-    if (drift > 0 && shots[idx].duration_frames < max) {
-      shots[idx].duration_frames += 1;
-      drift -= 1;
-    } else if (drift < 0 && shots[idx].duration_frames > min) {
-      shots[idx].duration_frames -= 1;
-      drift += 1;
-    }
-    i += 1;
+    s.duration_frames = Math.min(max, Math.max(min, Math.round(s.duration_frames)));
   }
 }
 
@@ -102,7 +145,7 @@ function asShot(s: Record<string, unknown>): StoryboardShot {
     comment_tr: String(s.comment_tr ?? s.commentTr ?? ""),
     quality_score: Number(s.quality_score ?? s.qualityScore ?? 7),
     lighting: String(s.lighting ?? "good"),
-    duration_frames: Number(s.duration_frames ?? s.durationFrames ?? 60),
+    duration_frames: Number(s.duration_frames ?? s.durationFrames ?? 150),
     scene_variant: String(s.scene_variant ?? s.sceneVariant ?? "full_bleed"),
   };
 }
@@ -123,8 +166,8 @@ export function repairStoryboard(shots: StoryboardShot[], photoCount: number): S
       comment_tr: "AI yanıtı bu fotoğraf için eksikti; otomatik sahne eklendi.",
       quality_score: 7,
       lighting: "average",
-      duration_frames: MIN_SHOT_FRAMES,
-      scene_variant: "full_bleed",
+      duration_frames: MIN_DATA_FRAMES,
+      scene_variant: "framed_center",
     };
   }
 
@@ -185,7 +228,7 @@ export function normalizePhotoAnalyzeResult(
   }));
   storyboard = repairStoryboard(storyboard, photoCount);
   dedupeCategoryIds(storyboard);
-  normalizeStoryboardDurations(storyboard);
+  normalizeStoryboardDurations(storyboard, calculateDynamicTarget(photoCount));
   return {
     storyboard,
     editing_notes_tr: String(raw.editing_notes_tr ?? raw.editingNotes ?? ""),

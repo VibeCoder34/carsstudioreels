@@ -27,6 +27,27 @@ export type MediaItem = {
   categoryLabelEn?: string;
 };
 
+/* ─── Aspect ratio tipleri ───────────────────────────────── */
+
+export type AspectRatioOption = "16:9" | "9:16" | "1:1" | "4:3" | "3:4";
+
+export const ASPECT_RATIO_DIMENSIONS: Record<AspectRatioOption, { width: number; height: number }> = {
+  "16:9": { width: 1920, height: 1080 },
+  "9:16": { width: 1080, height: 1920 },
+  "1:1":  { width: 1080, height: 1080 },
+  "4:3":  { width: 1440, height: 1080 },
+  "3:4":  { width: 1080, height: 1440 },
+};
+
+/** Dikey veya kare format: bulanık arka plan tekniği uygulanır */
+export function needsBlurBackground(ar: AspectRatioOption): boolean {
+  return ar === "9:16" || ar === "3:4" || ar === "1:1";
+}
+
+export function aspectRatioToLayout(ar: AspectRatioOption): "portrait" | "landscape" {
+  return ar === "9:16" || ar === "3:4" ? "portrait" : "landscape";
+}
+
 export type PrestigeReelsProps = {
   mediaItems: MediaItem[];
   carBrand: string;
@@ -36,8 +57,26 @@ export type PrestigeReelsProps = {
   galleryName: string;
   ctaPhone?: string;
   layout?: "portrait" | "landscape";
+  /** Çıktı formatı — layout'tan önce gelir */
+  aspectRatio?: AspectRatioOption;
   outroFrames?: number;
   reelStyle?: ReelStyle;
+  /** Ekstra araç detayları — çeşitli scene_variant'larda gösterilir */
+  km?: string;
+  motor?: string;      // eski: genel motor tanımı (opsiyonel, motorGucu/Hacmi önce kullanılır)
+  renk?: string;
+  vites?: string;
+  yakit?: string;
+  kasa?: string;
+  seri?: string;
+  aracDurumu?: string;
+  motorGucu?: string;
+  motorHacmi?: string;
+  cekis?: string;
+  garanti?: string;
+  agirHasarKayitli?: string;
+  plaka?: string;
+  ilanTarihi?: string;
 };
 
 /* ─── Zamanlama sabitleri ────────────────────────────────── */
@@ -219,12 +258,24 @@ export const STYLE_PRESETS: Record<ReelStyle, StylePreset> = {
 
 function FloatingSpecCard({
   localFrame,
+  ilanTarihi,
+  aracDurumu,
+  garanti,
+  agirHasarKayitli,
+  plaka,
+  renk,
   carBrand,
   carModel,
   year,
   price,
 }: {
   localFrame: number;
+  ilanTarihi?: string;
+  aracDurumu?: string;
+  garanti?: string;
+  agirHasarKayitli?: string;
+  plaka?: string;
+  renk?: string;
   carBrand: string;
   carModel: string;
   year: string;
@@ -233,12 +284,22 @@ function FloatingSpecCard({
   const slideX = interpolate(localFrame, [12, 38], [80, 0], { extrapolateRight: "clamp" });
   const cardOpacity = interpolate(localFrame, [12, 38], [0, 1], { extrapolateRight: "clamp" });
 
-  const rows = [
-    { label: "MARKA", value: carBrand, highlight: false },
-    { label: "MODEL", value: carModel, highlight: false },
-    { label: "YIL", value: year, highlight: false },
-    { label: "FİYAT", value: price, highlight: true },
-  ];
+  // İlan meta bilgileri — farklı veri noktaları, ticari veri değil
+  const rows = (ilanTarihi || aracDurumu || garanti != null || agirHasarKayitli != null)
+    ? [
+        ilanTarihi        ? { label: "İLAN TARİHİ",       value: ilanTarihi,           highlight: false } : null,
+        aracDurumu        ? { label: "ARAÇ DURUMU",        value: aracDurumu,           highlight: false } : null,
+        garanti           ? { label: "GARANTİ",            value: garanti,              highlight: false } : null,
+        agirHasarKayitli  ? { label: "AĞIR HASAR KAYITLI", value: agirHasarKayitli,     highlight: false } : null,
+        plaka             ? { label: "PLAKA / UYRUK",      value: plaka,                highlight: false } : null,
+        renk              ? { label: "RENK",               value: renk,                 highlight: false } : null,
+      ].filter(Boolean) as { label: string; value: string; highlight: boolean }[]
+    : [
+        { label: "MARKA", value: carBrand, highlight: false },
+        { label: "MODEL", value: carModel, highlight: false },
+        { label: "YIL",   value: year,     highlight: false },
+        { label: "FİYAT", value: price,    highlight: true  },
+      ];
 
   return (
     <div
@@ -698,6 +759,22 @@ function MediaSlide({
   carModel,
   year,
   price,
+  aspectRatio,
+  km,
+  motor,
+  renk,
+  vites,
+  yakit,
+  kasa,
+  seri,
+  aracDurumu,
+  motorGucu,
+  motorHacmi,
+  cekis,
+  garanti,
+  agirHasarKayitli,
+  plaka,
+  ilanTarihi,
 }: {
   item: MediaItem;
   index: number;
@@ -707,6 +784,22 @@ function MediaSlide({
   carModel: string;
   year: string;
   price: string;
+  aspectRatio?: AspectRatioOption;
+  km?: string;
+  motor?: string;
+  renk?: string;
+  vites?: string;
+  yakit?: string;
+  kasa?: string;
+  seri?: string;
+  aracDurumu?: string;
+  motorGucu?: string;
+  motorHacmi?: string;
+  cekis?: string;
+  garanti?: string;
+  agirHasarKayitli?: string;
+  plaka?: string;
+  ilanTarihi?: string;
 }) {
   const frame = useCurrentFrame();
   const startFrame = getItemStartFrame(items, index, preset.crossfadeFrames);
@@ -840,6 +933,15 @@ function MediaSlide({
     filter: colorGrade + blurFilter,
   };
 
+  const containStyle: React.CSSProperties = {
+    position: "absolute", inset: 0,
+    width: "100%", height: "100%",
+    objectFit: "contain",
+    transform: `scale(${finalScale}) translate(${finalTx}px, ${finalTy}px)`,
+    transformOrigin: "center center",
+    filter: colorGrade + blurFilter,
+  };
+
   const cat = item.categoryLabelEn?.trim();
   const washPulse =
     sceneVariant === "color_wash"
@@ -852,8 +954,8 @@ function MediaSlide({
   if (splitBand) {
     return (
       <AbsoluteFill style={{ opacity, overflow: "hidden", background: "#060608" }}>
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "72%", overflow: "hidden" }}>
-          <Img src={item.src} style={mediaStyle} />
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "72%", overflow: "hidden", background: "#0a0a0f" }}>
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade + blurFilter, transform: `scale(${finalScale}) translate(${finalTx}px, ${finalTy}px)`, transformOrigin: "center center" }} />
         </div>
         <div
           style={{
@@ -889,23 +991,25 @@ function MediaSlide({
   // ─── split_specs: Sol görsel + sağ spec paneli ────────────
   if (sceneVariant === "split_specs") {
     const specs = [
-      { label: "MARKA", value: carBrand, highlight: false },
-      { label: "MODEL", value: carModel, highlight: false },
-      { label: "YIL", value: year, highlight: false },
-      { label: "FİYAT", value: price, highlight: true },
+      { label: "KM",          value: km       || "—",  highlight: false },
+      { label: "MOTOR GÜCÜ",  value: motorGucu || motor || "—", highlight: false },
+      { label: "MOTOR HACMİ", value: motorHacmi || "—", highlight: false },
+      { label: "FİYAT",       value: price,             highlight: true  },
     ];
 
     return (
       <AbsoluteFill style={{ opacity, overflow: "hidden", background: "#040406" }}>
         {/* Sol: araç görseli */}
-        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: "58%", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: "58%", overflow: "hidden", background: "#0a0a0f" }}>
           <Img
             src={item.src}
             style={{
+              position: "absolute", inset: 0,
               width: "100%",
               height: "100%",
-              objectFit: "cover",
+              objectFit: "contain",
               transform: `scale(${finalScale}) translate(${finalTx}px, ${finalTy}px)`,
+              transformOrigin: "center center",
               filter: colorGrade,
             }}
           />
@@ -1019,12 +1123,14 @@ function MediaSlide({
     return (
       <AbsoluteFill style={{ opacity, overflow: "hidden", background: "#040406" }}>
         {/* Sol: araç görseli */}
-        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: "55%", overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, bottom: 0, width: "55%", overflow: "hidden", background: "#0a0a0f" }}>
           <Img
             src={item.src}
             style={{
-              width: "100%", height: "100%", objectFit: "cover",
+              position: "absolute", inset: 0,
+              width: "100%", height: "100%", objectFit: "contain",
               transform: `scale(${finalScale}) translate(${finalTx}px, ${finalTy}px)`,
+              transformOrigin: "center center",
               filter: colorGrade,
             }}
           />
@@ -1117,9 +1223,23 @@ function MediaSlide({
 
   // ─── card_panel: Yuvarlak köşeli foto kartı + veri paneli ──
   if (sceneVariant === "card_panel") {
+    // Gerçek araç verisi varsa önce onu kullan; yoksa SPEC_DATA'ya dön
+    const realEngineRows: SpecRow[] | null = (motorGucu || motorHacmi || cekis || yakit)
+      ? [
+          motorGucu  ? { label: "Motor Gücü",   value: motorGucu  } : null,
+          motorHacmi ? { label: "Motor Hacmi",  value: motorHacmi } : null,
+          cekis      ? { label: "Çekiş",         value: cekis      } : null,
+          yakit      ? { label: "Yakıt",         value: yakit      } : null,
+          vites      ? { label: "Vites",         value: vites      } : null,
+          km         ? { label: "KM",            value: km,        barPct: undefined } : null,
+        ].filter(Boolean) as SpecRow[]
+      : null;
+
     const category = detectSpecCategory(cat ?? "exterior");
-    const { title, rows } = SPEC_DATA[category];
-    const isChecklist = category === "cockpit";
+    const fallback = SPEC_DATA[category];
+    const title = realEngineRows ? "ARAÇ TEKNİK BİLGİLERİ" : fallback.title;
+    const rows  = realEngineRows ?? fallback.rows;
+    const isChecklist = !realEngineRows && category === "cockpit";
 
     const cardScale = interpolate(localFrame, [0, 24], [0.95, 1.0], { extrapolateRight: "clamp", easing: easeOut });
     const cardOp    = interpolate(localFrame, [0, 18], [0, 1], { extrapolateRight: "clamp" });
@@ -1139,16 +1259,13 @@ function MediaSlide({
           width: "50%",
           borderRadius: 18,
           overflow: "hidden",
+          background: "#0a0a0f",
           opacity: cardOp,
           transform: `scale(${cardScale})`,
           transformOrigin: "left center",
           boxShadow: "0 28px 90px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.04)",
         }}>
-          <Img src={item.src} style={{
-            width: "100%", height: "100%", objectFit: "cover",
-            transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`,
-            filter: colorGrade,
-          }} />
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.4) 0%, transparent 45%)", pointerEvents: "none" }} />
         </div>
 
@@ -1223,8 +1340,8 @@ function MediaSlide({
     return (
       <AbsoluteFill style={{ opacity, background: "#040408" }}>
         {/* Orta: fotoğraf — tam genişlik, %66 yükseklik, köşe yok */}
-        <div style={{ position: "absolute", top: "17%", left: 0, right: 0, height: "66%", overflow: "hidden" }}>
-          <Img src={item.src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, filter: colorGrade }} />
+        <div style={{ position: "absolute", top: "17%", left: 0, right: 0, height: "66%", overflow: "hidden", background: "#040408" }}>
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
         </div>
 
         {/* Üst bar */}
@@ -1298,11 +1415,12 @@ function MediaSlide({
           height: "60%",
           borderRadius: 20,
           overflow: "hidden",
+          background: "#07070d",
           opacity: cardOp,
           transform: `translateY(${cardY}px)`,
           boxShadow: "0 36px 110px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.05)",
         }}>
-          <Img src={item.src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, filter: colorGrade }} />
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.3) 0%, transparent 50%)", pointerEvents: "none" }} />
         </div>
 
@@ -1351,10 +1469,11 @@ function MediaSlide({
           top: 48, bottom: 48, left: 48,
           width: "calc(50% - 60px)",
           borderRadius: 16, overflow: "hidden",
+          background: "#07070d",
           opacity: leftOp, transform: `translateX(${leftX}px)`,
           boxShadow: "0 22px 70px rgba(0,0,0,0.68)",
         }}>
-          <Img src={item.src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, filter: colorGrade }} />
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
           {cat && (
             <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.16em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
@@ -1377,10 +1496,11 @@ function MediaSlide({
           top: 48, bottom: 48, right: 48,
           width: "calc(50% - 60px)",
           borderRadius: 16, overflow: "hidden",
+          background: "#07070d",
           opacity: rightOp, transform: `translateX(${rightX}px)`,
           boxShadow: "0 22px 70px rgba(0,0,0,0.68)",
         }}>
-          <Img src={right.src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: colorGrade }} />
+          <Img src={right.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
           {right.categoryLabelEn && (
             <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.16em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
@@ -1418,11 +1538,12 @@ function MediaSlide({
           top: 48, bottom: 48, left: 48,
           right: "calc(37% + 12px)",
           borderRadius: 16, overflow: "hidden",
+          background: "#06060c",
           opacity: mainOp, transform: `scale(${mainS})`,
           transformOrigin: "left center",
           boxShadow: "0 26px 80px rgba(0,0,0,0.72)",
         }}>
-          <Img src={item.src} style={{ width: "100%", height: "100%", objectFit: "cover", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, filter: colorGrade }} />
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.5) 0%, transparent 45%)", pointerEvents: "none" }} />
           {cat && (
             <div style={{ position: "absolute", bottom: 20, left: 22, fontFamily: "sans-serif", fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase" }}>
@@ -1437,10 +1558,11 @@ function MediaSlide({
           top: 48, right: 48,
           width: rightW, height: rightH,
           borderRadius: 14, overflow: "hidden",
+          background: "#06060c",
           opacity: topOp, transform: `translateX(${topX}px)`,
           boxShadow: "0 16px 50px rgba(0,0,0,0.62)",
         }}>
-          <Img src={b.src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: colorGrade }} />
+          <Img src={b.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
           {b.categoryLabelEn && (
             <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
@@ -1455,10 +1577,11 @@ function MediaSlide({
           bottom: 48, right: 48,
           width: rightW, height: rightH,
           borderRadius: 14, overflow: "hidden",
+          background: "#06060c",
           opacity: botOp, transform: `translateX(${botX}px)`,
           boxShadow: "0 16px 50px rgba(0,0,0,0.62)",
         }}>
-          <Img src={c.src} style={{ width: "100%", height: "100%", objectFit: "cover", filter: colorGrade }} />
+          <Img src={c.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
           {c.categoryLabelEn && (
             <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
@@ -1470,10 +1593,253 @@ function MediaSlide({
     );
   }
 
+  // ─── framed_center: Fotoğraf üstte küçük kart, altı geniş içerik ──
+  if (sceneVariant === "framed_center") {
+    const cardOp  = interpolate(localFrame, [0, 22], [0, 1], { extrapolateRight: "clamp" });
+    const cardY   = interpolate(localFrame, [0, 22], [20, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const t1Op    = interpolate(localFrame, [16, 32], [0, 1], { extrapolateRight: "clamp" });
+    const t2Op    = interpolate(localFrame, [24, 40], [0, 1], { extrapolateRight: "clamp" });
+    const t3Op    = interpolate(localFrame, [32, 48], [0, 1], { extrapolateRight: "clamp" });
+    const lineW   = interpolate(localFrame, [8, 28], [0, 64], { extrapolateRight: "clamp" });
+    const slideX  = interpolate(localFrame, [16, 36], [40, 0], { extrapolateRight: "clamp" });
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#05070d" }}>
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 50% 30%, rgba(6,18,44,0.7) 0%, transparent 65%)", pointerEvents: "none" }} />
+
+        {/* ÜST: fotoğraf kartı — ekranın üst %52'si */}
+        <div style={{
+          position: "absolute",
+          top: "4%", left: "8%", right: "8%",
+          height: "52%",
+          borderRadius: 18,
+          overflow: "hidden",
+          opacity: cardOp,
+          transform: `translateY(${cardY}px)`,
+          boxShadow: "0 32px 90px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.05)",
+          background: "#05070d",
+        }}>
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
+          {/* Kategori rozeti */}
+          {cat && (
+            <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.28)", borderRadius: 8, padding: "5px 14px" }}>
+              <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+            </div>
+          )}
+        </div>
+
+        {/* ALT: geniş içerik alanı — %44 */}
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "44%", padding: "20px 64px 32px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          {/* Altın çizgi */}
+          <div style={{ width: lineW, height: 2.5, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.2))", borderRadius: 2, marginBottom: 18, boxShadow: "0 0 12px rgba(248,201,106,0.45)" }} />
+
+          {/* Marka + Seri + Model */}
+          <div style={{ opacity: t1Op, transform: `translateX(${slideX}px)`, marginBottom: 10 }}>
+            <span style={{ fontFamily: "sans-serif", fontSize: 34, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.5px" }}>{carBrand}</span>
+            {seri && <span style={{ fontFamily: "sans-serif", fontSize: 20, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginLeft: 10 }}>{seri}</span>}
+            <span style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 400, color: "rgba(255,255,255,0.65)", marginLeft: 10, letterSpacing: "0px" }}>{carModel}</span>
+          </div>
+
+          {/* Yıl + Araç Durumu + Fiyat satırı */}
+          <div style={{ opacity: t2Op, transform: `translateX(${slideX * 0.6}px)`, display: "flex", alignItems: "center", gap: 24, marginBottom: 14, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 4 }}>Model Yılı</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: 20, fontWeight: 700, color: "rgba(255,255,255,0.88)" }}>{year}</div>
+            </div>
+            {aracDurumu && <>
+              <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
+              <div>
+                <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 4 }}>Araç Durumu</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: 18, fontWeight: 600, color: "rgba(255,255,255,0.80)" }}>{aracDurumu}</div>
+              </div>
+            </>}
+            <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
+            <div>
+              <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 4 }}>Satış Fiyatı</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: 24, fontWeight: 700, color: "#f8c96a", textShadow: "0 0 18px rgba(248,201,106,0.38)" }}>{price}</div>
+            </div>
+          </div>
+
+          {/* Özet: motorGucu · km · kasa */}
+          <div style={{ opacity: t3Op, display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ width: 3, height: 14, background: "#f8c96a", borderRadius: 2, flexShrink: 0 }} />
+            {(motorGucu || motor || km) ? (
+              <span style={{ fontFamily: "sans-serif", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.52)", letterSpacing: "0.04em" }}>
+                {[motorGucu || motor, km, kasa].filter(Boolean).join("  ·  ")}
+              </span>
+            ) : (
+              <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 400, color: "rgba(255,255,255,0.32)", letterSpacing: "0.08em" }}>Detaylı bilgi için iletişime geçin</span>
+            )}
+          </div>
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── listing_panel: Sol küçük foto + sağ zengin bilgi paneli ───
+  if (sceneVariant === "listing_panel") {
+    const photoOp  = interpolate(localFrame, [0, 22], [0, 1], { extrapolateRight: "clamp" });
+    const photoX   = interpolate(localFrame, [0, 22], [-44, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const r1Op     = interpolate(localFrame, [12, 28], [0, 1], { extrapolateRight: "clamp" });
+    const r2Op     = interpolate(localFrame, [20, 36], [0, 1], { extrapolateRight: "clamp" });
+    const r3Op     = interpolate(localFrame, [28, 44], [0, 1], { extrapolateRight: "clamp" });
+    const r4Op     = interpolate(localFrame, [36, 52], [0, 1], { extrapolateRight: "clamp" });
+    const lineW    = interpolate(localFrame, [6, 26], [0, 56], { extrapolateRight: "clamp" });
+
+    const infoRows = [
+      { label: "KM",       value: km || "—",    gold: false, op: r1Op },
+      { label: "VİTES",    value: vites || "—", gold: false, op: r2Op },
+      { label: "YAKIT",    value: yakit || "—", gold: false, op: r3Op },
+      { label: "KASA",     value: kasa || "—",  gold: true,  op: r4Op },
+    ];
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#04050a" }}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, rgba(6,18,44,0.5) 0%, transparent 60%)", pointerEvents: "none" }} />
+
+        {/* Sol: fotoğraf kartı */}
+        <div style={{
+          position: "absolute",
+          top: 48, bottom: 48, left: 48,
+          width: "42%",
+          borderRadius: 18,
+          overflow: "hidden",
+          opacity: photoOp,
+          transform: `translateX(${photoX}px)`,
+          boxShadow: "0 28px 80px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.05)",
+          background: "#04050a",
+        }}>
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,5,10,0.45) 0%, transparent 50%)", pointerEvents: "none" }} />
+          {cat && (
+            <div style={{ position: "absolute", bottom: 18, left: 20 }}>
+              <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>{cat}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Sağ: bilgi paneli */}
+        <div style={{
+          position: "absolute",
+          top: 0, right: 0, bottom: 0,
+          left: "calc(42% + 80px)",
+          display: "flex", flexDirection: "column", justifyContent: "center",
+          paddingRight: 72,
+        }}>
+          <div style={{ width: lineW, height: 2.5, background: "#f8c96a", borderRadius: 2, marginBottom: 28, boxShadow: "0 0 14px rgba(248,201,106,0.5)" }} />
+
+          {infoRows.map((row, ri) => (
+            <div key={ri} style={{
+              opacity: row.op,
+              paddingTop: ri === 0 ? 0 : 18,
+              paddingBottom: 18,
+              borderBottom: ri < infoRows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
+            }}>
+              <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.20em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 6 }}>
+                {row.label}
+              </div>
+              <div style={{
+                fontFamily: "sans-serif",
+                fontSize: row.gold ? 36 : 26,
+                fontWeight: 700,
+                color: row.gold ? "#f8c96a" : "rgba(255,255,255,0.92)",
+                letterSpacing: row.gold ? "0.5px" : "0.2px",
+                textShadow: row.gold ? "0 0 24px rgba(248,201,106,0.38)" : "none",
+                lineHeight: 1.1,
+              }}>
+                {row.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── editorial_right: Sağda fotoğraf kartı, solda büyük tipografi ─
+  if (sceneVariant === "editorial_right" || sceneVariant === "editorial_left") {
+    const isRight = sceneVariant === "editorial_right";
+    const photoOp = interpolate(localFrame, [0, 24], [0, 1], { extrapolateRight: "clamp" });
+    const photoX  = interpolate(localFrame, [0, 24], [isRight ? 50 : -50, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const textOp  = interpolate(localFrame, [18, 38], [0, 1], { extrapolateRight: "clamp" });
+    const textY   = interpolate(localFrame, [18, 38], [18, 0], { extrapolateRight: "clamp" });
+    const lineW   = interpolate(localFrame, [10, 32], [0, 54], { extrapolateRight: "clamp" });
+
+    const photoStyle = isRight
+      ? { top: 48, bottom: 48, right: 48, left: "44%" }
+      : { top: 48, bottom: 48, left: 48, right: "44%" };
+    const textStyle = isRight
+      ? { top: 0, left: 0, bottom: 0, right: "56%", padding: "0 56px 0 64px" }
+      : { top: 0, right: 0, bottom: 0, left: "56%", padding: "0 64px 0 56px" };
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#050608" }}>
+        {/* Fotoğraf kartı */}
+        <div style={{
+          position: "absolute",
+          ...photoStyle,
+          borderRadius: 18,
+          overflow: "hidden",
+          opacity: photoOp,
+          transform: `translateX(${photoX}px)`,
+          boxShadow: "0 30px 90px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.05)",
+          background: "#050608",
+        }}>
+          <Img src={item.src} style={{
+            position: "absolute", inset: 0,
+            width: "100%", height: "100%", objectFit: "contain",
+            transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`,
+            transformOrigin: "center center",
+            filter: colorGrade,
+          }} />
+          {/* Alt gradient */}
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(5,6,8,0.38) 0%, transparent 40%)", pointerEvents: "none" }} />
+        </div>
+
+        {/* Tipografi paneli */}
+        <div style={{
+          position: "absolute",
+          ...textStyle,
+          display: "flex", flexDirection: "column", justifyContent: "center",
+          opacity: textOp, transform: `translateY(${textY}px)`,
+        }}>
+          <div style={{ width: lineW, height: 2.5, background: "#f8c96a", borderRadius: 2, marginBottom: 26, boxShadow: "0 0 14px rgba(248,201,106,0.52)" }} />
+          <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 14 }}>
+            {cat ?? "Araç Detayı"}
+          </div>
+          <div style={{ fontFamily: "sans-serif", fontSize: 40, fontWeight: 800, color: "#ffffff", lineHeight: 1.05, letterSpacing: "-0.5px", marginBottom: 6 }}>
+            {carBrand}
+          </div>
+          <div style={{ fontFamily: "sans-serif", fontSize: 26, fontWeight: 400, color: "rgba(255,255,255,0.68)", lineHeight: 1.2, marginBottom: 22, letterSpacing: "0.2px" }}>
+            {carModel}
+          </div>
+          <div style={{ height: 1, background: "rgba(255,255,255,0.08)", marginBottom: 22 }} />
+          {/* Performans detayları: Motor Gücü, Çekiş, Renk + Fiyat */}
+          {[
+            { label: "MOTOR GÜCÜ", value: motorGucu || motor || "—",  gold: false },
+            { label: "ÇEKİŞ",      value: cekis  || "—",  gold: false },
+            { label: "RENK",       value: renk   || "—",  gold: false },
+            { label: "FİYAT",      value: price,           gold: true  },
+          ].map((d, di) => {
+            const dOp = interpolate(localFrame, [18 + di * 10, 38 + di * 10], [0, 1], { extrapolateRight: "clamp" });
+            return (
+              <div key={d.label} style={{ opacity: dOp, marginBottom: di < 3 ? 14 : 0 }}>
+                <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 4 }}>{d.label}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: d.gold ? 28 : 18, fontWeight: d.gold ? 700 : 600, color: d.gold ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: d.gold ? "0.5px" : "0.1px", textShadow: d.gold ? "0 0 20px rgba(248,201,106,0.38)" : "none" }}>
+                  {d.value}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
   return (
-    <AbsoluteFill style={{ opacity, overflow: "hidden" }}>
+    <AbsoluteFill style={{ opacity, overflow: "hidden", background: item.type === "image" ? "#050508" : undefined }}>
       {item.type === "image" ? (
-        <Img src={item.src} style={mediaStyle} />
+        <Img src={item.src} style={containStyle} />
       ) : (
         <Video
           src={item.src}
@@ -1526,6 +1892,12 @@ function MediaSlide({
           carModel={carModel}
           year={year}
           price={price}
+          ilanTarihi={ilanTarihi}
+          aracDurumu={aracDurumu}
+          garanti={garanti}
+          agirHasarKayitli={agirHasarKayitli}
+          plaka={plaka}
+          renk={renk}
         />
       )}
 
@@ -2203,9 +2575,28 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   galleryName,
   ctaPhone,
   layout = "landscape",
+  aspectRatio,
   outroFrames = OUTRO_FRAMES,
   reelStyle = "cinematic",
+  km,
+  motor,
+  renk,
+  vites,
+  yakit,
+  kasa,
+  seri,
+  aracDurumu,
+  motorGucu,
+  motorHacmi,
+  cekis,
+  garanti,
+  agirHasarKayitli,
+  plaka,
+  ilanTarihi,
 }) => {
+  // aspectRatio verilmişse layout'u ondan türet
+  const effectiveLayout: "portrait" | "landscape" =
+    aspectRatio ? aspectRatioToLayout(aspectRatio) : layout;
   const frame = useCurrentFrame();
   const preset = STYLE_PRESETS[reelStyle];
   const safeOutroFrames = Math.max(0, outroFrames);
@@ -2229,11 +2620,14 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
     "split_specs", "spec_table", "side_table",
     "card_panel", "letter_box", "feature_hero",
     "duo_split", "trio_mosaic",
+    // Kendi bilgilerini içeren layoutlar
+    "framed_center", "editorial_right", "editorial_left", "listing_panel",
   ]);
   const SUPPRESS_OVERLAYS = new Set([
     "card_panel", "letter_box", "feature_hero",
     "duo_split", "trio_mosaic",
     "split_specs", "side_table",
+    "framed_center", "editorial_right", "editorial_left", "listing_panel",
   ]);
 
   const hideTextBlock = SUPPRESS_TEXT.has(activeVariant);
@@ -2246,6 +2640,10 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
         <MediaSlide
           key={i} item={item} index={i} items={mediaItems} preset={preset}
           carBrand={carBrand} carModel={carModel} year={year} price={price}
+          aspectRatio={aspectRatio}
+          km={km} motor={motor} renk={renk} vites={vites} yakit={yakit} kasa={kasa}
+          seri={seri} aracDurumu={aracDurumu} motorGucu={motorGucu} motorHacmi={motorHacmi}
+          cekis={cekis} garanti={garanti} agirHasarKayitli={agirHasarKayitli} plaka={plaka} ilanTarihi={ilanTarihi}
         />
       ))}
 
@@ -2265,7 +2663,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
       )}
 
       {/* Galeri rozeti */}
-      {!hideOverlays && <GalleryBadge name={galleryName} layout={layout} />}
+      {!hideOverlays && <GalleryBadge name={galleryName} layout={effectiveLayout} />}
 
       {/* Alt metin — kendi layout'u olan sahnelerde gizle */}
       {!hideTextBlock && (
@@ -2274,7 +2672,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
           carModel={carModel}
           year={year}
           price={price}
-          layout={layout}
+          layout={effectiveLayout}
         />
       )}
 
@@ -2287,7 +2685,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
           galleryName={galleryName}
           ctaPhone={ctaPhone}
           outroStartFrame={outroStartFrame}
-          layout={layout}
+          layout={effectiveLayout}
         />
       )}
     </AbsoluteFill>

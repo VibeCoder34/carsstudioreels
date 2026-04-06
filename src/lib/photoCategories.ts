@@ -54,6 +54,14 @@ export const SCENE_VARIANTS = [
   "feature_hero",
   "duo_split",
   "trio_mosaic",
+  /** Fotoğraf üstte küçük kart (%52), altı geniş içerik (marka/model/yıl/fiyat) */
+  "framed_center",
+  /** Fotoğraf sağda kart olarak, solda büyük tipografi */
+  "editorial_right",
+  /** Fotoğraf solda kart olarak, sağda büyük tipografi */
+  "editorial_left",
+  /** Sol küçük fotoğraf kartı (%42), sağda 4 satır bilgi tablosu */
+  "listing_panel",
 ] as const;
 
 export type SceneVariant = (typeof SCENE_VARIANTS)[number];
