@@ -5,8 +5,8 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
   Upload, Plus, Wand2, Sparkles, ArrowLeft, X,
-  ChevronRight, ImageIcon, Phone, Brain,
-  Star, Search, Mic,
+  ChevronRight, ChevronDown, ImageIcon, Phone, Brain,
+  Star, Search, Mic, Loader2, Download,
 } from "lucide-react";
 import {
   PrestigeReels,
@@ -22,8 +22,10 @@ import {
 import { imageFileToBase64 } from "@/lib/frameExtractor";
 import {
   CATEGORY_LABEL_TR,
+  SCENE_VARIANTS,
   isFixedCategoryId,
   isSceneVariant,
+  type SceneVariant,
 } from "@/lib/photoCategories";
 import {
   normalizePhotoAnalyzeResult,
@@ -35,8 +37,9 @@ import {
 import {
   attachVoiceoverAudioToMediaItems,
   revokeVoiceoverObjectUrls,
-  type VoiceoverLanguage,
 } from "@/lib/voiceoverPipeline";
+import { LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
+import { MUSIC_TRACKS, resolveMusicTrack, type MusicTrackId } from "@/lib/music";
 
 const Player = dynamic(
   () => import("@remotion/player").then((m) => m.Player),
@@ -60,7 +63,7 @@ function isImageFile(file: File): boolean {
 
 /* ─── Tipler ─────────────────────────────────────────────── */
 
-type Step = "upload" | "analyzing" | "preview";
+type Step = "upload" | "identify" | "analyzing" | "preview";
 
 interface FormData {
   carBrand: string;
@@ -104,39 +107,76 @@ export default function DemoPage() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatioOption>("16:9");
   const [outroFrames, setOutroFrames] = useState<number>(90);
   const [form, setForm] = useState<FormData>({
-    carBrand: "BMW",
-    carModel: "320Ci",
-    year: "2003",
-    price: "₺485.000",
-    ctaPhone: "0532 123 45 67",
-    km: "236.300 km",
-    motor: "2.2L Benzin",
-    renk: "Mavi",
-    vites: "Otomatik",
-    yakit: "Benzin & LPG",
-    kasa: "Coupe",
-    seri: "3 Serisi",
+    carBrand: "",
+    carModel: "",
+    year: "",
+    price: "",
+    ctaPhone: "",
+    km: "",
+    motor: "",
+    renk: "",
+    vites: "",
+    yakit: "",
+    kasa: "",
+    seri: "",
     aracDurumu: "İkinci El",
-    motorGucu: "170 HP",
-    motorHacmi: "2171 cc",
-    cekis: "Arkadan İtiş",
-    garanti: "Hayır",
-    agirHasarKayitli: "Hayır",
-    plaka: "TR Plakalı",
-    ilanTarihi: "30 Mart 2026",
+    motorGucu: "",
+    motorHacmi: "",
+    cekis: "",
+    garanti: "",
+    agirHasarKayitli: "",
+    plaka: "",
+    ilanTarihi: "",
   });
+  const [isIdentifying, setIsIdentifying] = useState(false);
   const [reelStyle, setReelStyle] = useState<ReelStyle>("cinematic");
+  const [videoLanguage, setVideoLanguage] = useState<LanguageCode>("tr");
+  const [videoNotes, setVideoNotes] = useState("");
+  const [musicTrackId, setMusicTrackId] = useState<MusicTrackId>("smooth1");
+  const [musicVolume, setMusicVolume] = useState(0.45);
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
-  const [voiceoverLanguage, setVoiceoverLanguage] = useState<VoiceoverLanguage>("tr");
   /** TTS kısmen/başarısız olduğunda önizlemede gösterilir */
   const [voiceoverTtsNotice, setVoiceoverTtsNotice] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const preAnalyzeMediaRef = useRef<MediaItem[] | null>(null);
 
+  const identifyCarFromPhotos = useCallback(async (fileList: File[]) => {
+    if (!fileList.length) return;
+    setIsIdentifying(true);
+    try {
+      const photos = await Promise.all(
+        fileList.slice(0, 5).map(async (file) => {
+          const { base64 } = await imageFileToBase64(file);
+          return { base64 };
+        })
+      );
+      const res = await fetch("/api/identify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photos }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setForm((prev) => ({
+        ...prev,
+        ...Object.fromEntries(
+          Object.entries(data as Record<string, string>).filter(
+            ([, v]) => typeof v === "string" && v.trim()
+          )
+        ),
+      }));
+    } catch (err) {
+      console.error("[identify]", err);
+    } finally {
+      setIsIdentifying(false);
+    }
+  }, []);
+
   const addFiles = useCallback((fileList: FileList | null) => {
     if (!fileList) return;
     const newFiles = Array.from(fileList).filter((f) => isImageFile(f));
+    if (!newFiles.length) return;
     setFiles((prev) => [...prev, ...newFiles]);
     setMediaItems((prev) => [
       ...prev,
@@ -146,6 +186,17 @@ export default function DemoPage() {
       })),
     ]);
   }, []);
+
+  const goToIdentify = useCallback(() => {
+    setForm({
+      carBrand: "", carModel: "", year: "", price: "", ctaPhone: "",
+      km: "", motor: "", renk: "", vites: "", yakit: "", kasa: "",
+      seri: "", aracDurumu: "İkinci El", motorGucu: "", motorHacmi: "",
+      cekis: "", garanti: "", agirHasarKayitli: "", plaka: "", ilanTarihi: "",
+    });
+    setStep("identify");
+    setTimeout(() => identifyCarFromPhotos(files), 0);
+  }, [files, identifyCarFromPhotos]);
 
   const removeItem = (index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -175,8 +226,10 @@ export default function DemoPage() {
         body: JSON.stringify({
           photos,
           aspectRatio,
+          videoLanguage,
+          userNotes: videoNotes,
           voiceover: voiceoverEnabled,
-          ...(voiceoverEnabled ? { voiceoverLanguage } : {}),
+          ...(voiceoverEnabled ? { voiceoverLanguage: videoLanguage } : {}),
         }),
       });
 
@@ -208,8 +261,8 @@ export default function DemoPage() {
       });
 
       if (voiceoverEnabled) {
-        setAnalyzePhase("Seslendirme üretiliyor (ElevenLabs)…");
-        const vo = await attachVoiceoverAudioToMediaItems(ordered, result.storyboard, voiceoverLanguage);
+        setAnalyzePhase("Seslendirme üretiliyor…");
+        const vo = await attachVoiceoverAudioToMediaItems(ordered, result.storyboard, videoLanguage);
         ordered = vo.items;
         if (vo.ttsError) {
           setVoiceoverTtsNotice(vo.ttsError);
@@ -276,25 +329,25 @@ export default function DemoPage() {
         </div>
       </header>
 
-      {(step === "preview" || step === "analyzing") && (
+      {(step === "preview" || step === "analyzing" || step === "identify") && (
         <div className="dashboard-toolbar flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          {step === "preview" ? (
+          {step === "analyzing" ? (
+            <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
+              <Brain className="w-4 h-4 text-[var(--primary)]" />
+              AI analizi
+            </div>
+          ) : (
             <button
               type="button"
-              onClick={() => setStep("upload")}
+              onClick={() => setStep(step === "preview" ? "upload" : "upload")}
               className="flex items-center gap-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Geri dön
             </button>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
-              <Brain className="w-4 h-4 text-[var(--primary)]" />
-              AI analizi
-            </div>
           )}
           <p className="text-xs text-[var(--muted-foreground)]">
-            {step === "preview" ? "Önizleme" : "İşleniyor…"}
+            {step === "preview" ? "Önizleme" : step === "identify" ? "Araç bilgileri" : "İşleniyor…"}
           </p>
         </div>
       )}
@@ -304,16 +357,21 @@ export default function DemoPage() {
           <UploadStep
             mediaItems={mediaItems}
             isDragging={isDragging}
-            form={form}
             fileInputRef={fileInputRef}
             error={analyzeError}
             aspectRatio={aspectRatio}
             reelStyle={reelStyle}
             flowRec={flowRec}
+            videoLanguage={videoLanguage}
+            videoNotes={videoNotes}
+            musicTrackId={musicTrackId}
+            musicVolume={musicVolume}
             voiceoverEnabled={voiceoverEnabled}
-            voiceoverLanguage={voiceoverLanguage}
+            onVideoLanguageChange={setVideoLanguage}
+            onVideoNotesChange={setVideoNotes}
+            onMusicTrackIdChange={setMusicTrackId}
+            onMusicVolumeChange={setMusicVolume}
             onVoiceoverEnabledChange={setVoiceoverEnabled}
-            onVoiceoverLanguageChange={setVoiceoverLanguage}
             onAspectRatioChange={setAspectRatio}
             onStyleChange={setReelStyle}
             onDrop={(e) => { e.preventDefault(); setIsDragging(false); addFiles(e.dataTransfer.files); }}
@@ -321,8 +379,18 @@ export default function DemoPage() {
             onDragLeave={() => setIsDragging(false)}
             onFileChange={(e) => addFiles(e.target.files)}
             onRemoveItem={removeItem}
+            onNext={goToIdentify}
+          />
+        )}
+
+        {step === "identify" && (
+          <IdentifyStep
+            mediaItems={mediaItems}
+            form={form}
+            isIdentifying={isIdentifying}
             onFormChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
-            onAnalyze={handleAnalyze}
+            onConfirm={handleAnalyze}
+            onBack={() => setStep("upload")}
           />
         )}
 
@@ -339,9 +407,19 @@ export default function DemoPage() {
             aspectRatio={aspectRatio}
             outroFrames={outroFrames}
             reelStyle={reelStyle}
+            videoLanguage={videoLanguage}
+            musicTrackId={musicTrackId}
+            musicVolume={musicVolume}
             voiceoverEnabled={voiceoverEnabled}
             voiceoverSync={voiceoverSync}
             ttsNotice={voiceoverTtsNotice}
+            onVariantChange={(shotIndex, variant) => {
+              setMediaItems((prev) =>
+                prev.map((item, i) =>
+                  i === shotIndex ? { ...item, sceneVariant: variant } : item
+                )
+              );
+            }}
             onReset={() => {
               revokeVoiceoverObjectUrls(mediaItems);
               if (preAnalyzeMediaRef.current) {
@@ -358,6 +436,54 @@ export default function DemoPage() {
   );
 }
 
+/* ─── Şablon etiketleri (Türkçe) ────────────────────────── */
+
+const VARIANT_LABELS: Record<SceneVariant, string> = {
+  full_bleed:       "Tam Ekran",
+  slide_entry_left: "Soldan Giriş",
+  slide_entry_right:"Sağdan Giriş",
+  push_horizontal:  "Yatay İtiş",
+  color_wash:       "Renk Yıkaması",
+  ken_zoom_slow:    "Yavaş Zoom",
+  split_band:       "Bant Bölünmüş",
+  split_specs:      "Teknik Bölünmüş",
+  floating_card:    "Yüzen Kart",
+  callout:          "Etiket Balonu",
+  spec_table:       "Teknik Tablo",
+  side_table:       "Yan Tablo",
+  card_panel:       "Kart Paneli",
+  letter_box:       "Letterbox",
+  feature_hero:     "Performans Hero",
+  duo_split:        "İkili Bölünmüş",
+  trio_mosaic:      "Üçlü Mozaik",
+  framed_center:    "Çerçeveli Merkez",
+  editorial_right:  "Editoryal Sağ",
+  editorial_left:   "Editoryal Sol",
+  listing_panel:    "İlan Paneli",
+  price_reveal:     "Fiyat Vurgusu",
+  spotlight:        "Spot Işığı",
+  stats_grid:       "İstatistik Grid",
+};
+
+const VARIANT_GROUPS: { label: string; variants: SceneVariant[] }[] = [
+  {
+    label: "Tam Ekran",
+    variants: ["full_bleed", "slide_entry_left", "slide_entry_right", "push_horizontal", "color_wash", "ken_zoom_slow", "spotlight"],
+  },
+  {
+    label: "Bölünmüş Düzen",
+    variants: ["split_band", "split_specs", "letter_box", "duo_split", "trio_mosaic"],
+  },
+  {
+    label: "Veri & Teknik",
+    variants: ["floating_card", "callout", "spec_table", "side_table", "card_panel", "feature_hero", "stats_grid"],
+  },
+  {
+    label: "Editoryal & Satış",
+    variants: ["framed_center", "editorial_right", "editorial_left", "listing_panel", "price_reveal"],
+  },
+];
+
 /* ─── Upload adımı ───────────────────────────────────────── */
 
 const ASPECT_RATIO_OPTIONS: { value: AspectRatioOption; label: string; sub: string; icon: string }[] = [
@@ -369,26 +495,31 @@ const ASPECT_RATIO_OPTIONS: { value: AspectRatioOption; label: string; sub: stri
 ];
 
 function UploadStep({
-  mediaItems, isDragging, form, fileInputRef, error,
+  mediaItems, isDragging, fileInputRef, error,
   aspectRatio, reelStyle, flowRec,
-  voiceoverEnabled, voiceoverLanguage,
-  onVoiceoverEnabledChange, onVoiceoverLanguageChange,
+  videoLanguage, videoNotes, musicTrackId, musicVolume, voiceoverEnabled,
+  onVideoLanguageChange, onVideoNotesChange, onMusicTrackIdChange, onMusicVolumeChange, onVoiceoverEnabledChange,
   onAspectRatioChange, onStyleChange,
   onDrop, onDragOver, onDragLeave, onFileChange,
-  onRemoveItem, onFormChange, onAnalyze,
+  onRemoveItem, onNext,
 }: {
   mediaItems: MediaItem[];
   isDragging: boolean;
-  form: FormData;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   error: string;
   aspectRatio: AspectRatioOption;
   reelStyle: ReelStyle;
   flowRec: FlowRecommendation | null;
+  videoLanguage: LanguageCode;
+  videoNotes: string;
+  musicTrackId: MusicTrackId;
+  musicVolume: number;
   voiceoverEnabled: boolean;
-  voiceoverLanguage: VoiceoverLanguage;
+  onVideoLanguageChange: (v: LanguageCode) => void;
+  onVideoNotesChange: (v: string) => void;
+  onMusicTrackIdChange: (v: MusicTrackId) => void;
+  onMusicVolumeChange: (v: number) => void;
   onVoiceoverEnabledChange: (v: boolean) => void;
-  onVoiceoverLanguageChange: (v: VoiceoverLanguage) => void;
   onAspectRatioChange: (ar: AspectRatioOption) => void;
   onStyleChange: (style: ReelStyle) => void;
   onDrop: (e: React.DragEvent) => void;
@@ -396,8 +527,7 @@ function UploadStep({
   onDragLeave: () => void;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveItem: (i: number) => void;
-  onFormChange: (field: keyof FormData, value: string) => void;
-  onAnalyze: () => void;
+  onNext: () => void;
 }) {
   const hasMedia = mediaItems.length > 0;
   const arDims = ASPECT_RATIO_DIMENSIONS[aspectRatio];
@@ -445,130 +575,36 @@ function UploadStep({
               </span>
             </div>
 
-            {/* Format seçici */}
-            <div className="demo-card p-4 space-y-3">
-              <div className="demo-section-label">Çıktı formatı</div>
-              <div className="grid grid-cols-5 gap-2">
-                {ASPECT_RATIO_OPTIONS.map((opt) => {
-                  const active = aspectRatio === opt.value;
-                  return (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => onAspectRatioChange(opt.value)}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-[var(--radius)] border text-center transition-all ${
-                        active
-                          ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
-                          : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
-                      }`}
-                    >
-                      <span className="text-base leading-none">{opt.icon}</span>
-                      <span className={`text-xs font-bold ${active ? "text-[var(--primary)]" : ""}`}>{opt.label}</span>
-                      <span className="text-[9px] text-[var(--muted-foreground)]">{opt.sub}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {(aspectRatio === "9:16" || aspectRatio === "3:4" || aspectRatio === "1:1") && (
-                <p className="text-[10px] text-[var(--muted-foreground)]">
-                  Yatay fotoğraflar otomatik bulanık arka plan ile gösterilir.
-                </p>
-              )}
-            </div>
-
-            {/* Akış önerisi / uyarı */}
-            {flowRec?.warning && (
-              <div className={`rounded-[var(--radius)] border px-4 py-3 text-sm ${
-                flowRec.mode === "fast_sequence"
-                  ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                  : "border-[var(--primary)]/30 bg-[var(--primary)]/8 text-[var(--primary)]"
-              }`}>
-                <div className="font-semibold mb-0.5">
-                  {flowRec.mode === "fast_sequence" ? "Çok fazla fotoğraf" : "Uzun video modu"}
-                </div>
-                <p className="text-[12px] leading-snug opacity-90">{flowRec.warning}</p>
-                {flowRec.suggestion && (
-                  <p className="text-[11px] leading-snug mt-1 opacity-75">{flowRec.suggestion}</p>
-                )}
-              </div>
-            )}
-
-            {error && (
-              <div className="rounded-[var(--radius)] border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm text-[var(--destructive)]">
-                {error}
-              </div>
-            )}
-
-            <div className="demo-card p-4 space-y-3">
-              <div className="demo-section-label flex items-center gap-2">
-                <Mic className="w-4 h-4 text-[var(--primary)]" />
-                Seslendirme (ElevenLabs)
-              </div>
-              <label className="flex items-start gap-3 cursor-pointer">
+            {/* Fotoğraf yükleme (yalnızca ilk seçimde) */}
+            {!hasMedia && (
+              <div
+                onDrop={onDrop}
+                onDragOver={onDragOver}
+                onDragLeave={onDragLeave}
+                onClick={() => fileInputRef.current?.click()}
+                className={`demo-card cursor-pointer border-2 border-dashed p-8 sm:p-10 text-center transition-all ${
+                  isDragging
+                    ? "border-[var(--primary)] bg-[var(--primary)]/5"
+                    : "border-[var(--border)] hover:border-[var(--primary)]/45 hover:bg-[var(--primary)]/[0.03]"
+                }`}
+              >
                 <input
-                  type="checkbox"
-                  checked={voiceoverEnabled}
-                  onChange={(e) => onVoiceoverEnabledChange(e.target.checked)}
-                  className="mt-1 rounded border-[var(--border)]"
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/jpeg,image/png,image/webp,image/heic"
+                  className="hidden"
+                  onChange={onFileChange}
                 />
-                <span className="text-sm text-[var(--foreground)] leading-snug">
-                  Videoya AI seslendirmesi ekle (isteğe bağlı). Açıkken her sahne için söylenecek metin kurguda üretilir ve ses bitene kadar sahne uzatılabilir.
-                </span>
-              </label>
-              <div className={`space-y-2 pl-1 ${!voiceoverEnabled ? "opacity-45 pointer-events-none" : ""}`}>
-                <div className="text-xs text-[var(--muted-foreground)]">Seslendirme dili</div>
-                <div className="flex flex-wrap gap-2">
-                  {([
-                    { code: "tr" as const, label: "Türkçe" },
-                    { code: "en" as const, label: "English" },
-                  ]).map((opt) => {
-                    const active = voiceoverLanguage === opt.code;
-                    return (
-                      <button
-                        key={opt.code}
-                        type="button"
-                        onClick={() => onVoiceoverLanguageChange(opt.code)}
-                        className={`px-4 py-2 rounded-[var(--radius-pill)] text-sm font-medium border transition-all ${
-                          active
-                            ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
-                            : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
+                <div className="flex justify-center mb-4">
+                  <div className="w-14 h-14 rounded-full bg-[var(--primary)]/10 flex items-center justify-center">
+                    <Upload className="w-7 h-7 text-[var(--primary)]" />
+                  </div>
                 </div>
+                <h3 className="font-semibold text-[var(--foreground)] mb-1">Fotoğraf yükle</h3>
+                <p className="text-[var(--muted-foreground)] text-sm">Sürükle-bırak veya tıkla — JPG, PNG, WEBP</p>
               </div>
-            </div>
-
-            <div
-              onDrop={onDrop}
-              onDragOver={onDragOver}
-              onDragLeave={onDragLeave}
-              onClick={() => fileInputRef.current?.click()}
-              className={`demo-card cursor-pointer border-2 border-dashed p-8 sm:p-10 text-center transition-all ${
-                isDragging
-                  ? "border-[var(--primary)] bg-[var(--primary)]/5"
-                  : "border-[var(--border)] hover:border-[var(--primary)]/45 hover:bg-[var(--primary)]/[0.03]"
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,image/webp,image/heic"
-                className="hidden"
-                onChange={onFileChange}
-              />
-              <div className="flex justify-center mb-4">
-                <div className="w-14 h-14 rounded-full bg-[var(--primary)]/10 flex items-center justify-center">
-                  <Upload className="w-7 h-7 text-[var(--primary)]" />
-                </div>
-              </div>
-              <h3 className="font-semibold text-[var(--foreground)] mb-1">Fotoğraf yükle</h3>
-              <p className="text-[var(--muted-foreground)] text-sm">Sürükle-bırak veya tıkla — JPG, PNG, WEBP</p>
-            </div>
+            )}
 
             {hasMedia && (
               <div className="demo-card p-4">
@@ -609,67 +645,30 @@ function UploadStep({
               </div>
             )}
 
-            <div className="demo-card p-5 space-y-4">
-              <h3 className="demo-section-label mb-1">Araç bilgileri</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {(["carBrand", "carModel", "year", "price"] as const).map((field) => (
-                  <div key={field}>
-                    <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">
-                      {field === "carBrand" ? "Marka" : field === "carModel" ? "Model" : field === "year" ? "Yıl" : "Fiyat"}
-                    </label>
-                    <input
-                      value={form[field]}
-                      onChange={(e) => onFormChange(field, e.target.value)}
-                      className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/20 focus:border-[var(--ring)]"
-                    />
-                  </div>
-                ))}
+            {/* Akış önerisi / uyarı */}
+            {flowRec?.warning && (
+              <div className={`rounded-[var(--radius)] border px-4 py-3 text-sm ${
+                flowRec.mode === "fast_sequence"
+                  ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  : "border-[var(--primary)]/30 bg-[var(--primary)]/8 text-[var(--primary)]"
+              }`}>
+                <div className="font-semibold mb-0.5">
+                  {flowRec.mode === "fast_sequence" ? "Çok fazla fotoğraf" : "Uzun video modu"}
+                </div>
+                <p className="text-[12px] leading-snug opacity-90">{flowRec.warning}</p>
+                {flowRec.suggestion && (
+                  <p className="text-[11px] leading-snug mt-1 opacity-75">{flowRec.suggestion}</p>
+                )}
               </div>
-              {/* Teknik & ilan detayları */}
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                {(
-                  [
-                    ["seri",             "Seri",              "3 Serisi"],
-                    ["km",               "KM",                "236.300 km"],
-                    ["motorGucu",        "Motor Gücü",        "170 HP"],
-                    ["motorHacmi",       "Motor Hacmi",       "2171 cc"],
-                    ["vites",            "Vites",             "Otomatik"],
-                    ["yakit",            "Yakıt Tipi",        "Benzin & LPG"],
-                    ["kasa",             "Kasa Tipi",         "Coupe"],
-                    ["renk",             "Renk",              "Mavi"],
-                    ["cekis",            "Çekiş",             "Arkadan İtiş"],
-                    ["aracDurumu",       "Araç Durumu",       "İkinci El"],
-                    ["garanti",          "Garanti",           "Hayır"],
-                    ["agirHasarKayitli", "Ağır Hasar",        "Hayır"],
-                    ["plaka",            "Plaka / Uyruk",     "TR Plakalı"],
-                    ["ilanTarihi",       "İlan Tarihi",       "30 Mart 2026"],
-                  ] as [keyof FormData, string, string][]
-                ).map(([field, label, placeholder]) => (
-                  <div key={field}>
-                    <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">{label}</label>
-                    <input
-                      value={form[field]}
-                      onChange={(e) => onFormChange(field, e.target.value)}
-                      className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/20 focus:border-[var(--ring)]"
-                      placeholder={placeholder}
-                    />
-                  </div>
-                ))}
-              </div>
-              <div>
-                <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">
-                  <Phone className="w-3 h-3 inline mr-1" />
-                  Telefon (opsiyonel)
-                </label>
-                <input
-                  value={form.ctaPhone}
-                  onChange={(e) => onFormChange("ctaPhone", e.target.value)}
-                  className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/20 focus:border-[var(--ring)]"
-                  placeholder="0532 123 45 67"
-                />
-              </div>
-            </div>
+            )}
 
+            {error && (
+              <div className="rounded-[var(--radius)] border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm text-[var(--destructive)]">
+                {error}
+              </div>
+            )}
+
+            {/* Video stili */}
             <div className="demo-card p-4 space-y-3">
               <div className="demo-section-label">Video stili</div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -698,11 +697,140 @@ function UploadStep({
                   );
                 })}
               </div>
+
+              {/* Çıktı formatı */}
+              <div className="pt-2 space-y-2">
+                <div className="text-xs text-[var(--muted-foreground)]">Çıktı formatı</div>
+                <div className="grid grid-cols-5 gap-2">
+                  {ASPECT_RATIO_OPTIONS.map((opt) => {
+                    const active = aspectRatio === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => onAspectRatioChange(opt.value)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-[var(--radius)] border text-center transition-all ${
+                          active
+                            ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
+                            : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
+                        }`}
+                      >
+                        <span className="text-base leading-none">{opt.icon}</span>
+                        <span className={`text-xs font-bold ${active ? "text-[var(--primary)]" : ""}`}>{opt.label}</span>
+                        <span className="text-[9px] text-[var(--muted-foreground)]">{opt.sub}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {(aspectRatio === "9:16" || aspectRatio === "3:4" || aspectRatio === "1:1") && (
+                  <p className="text-[10px] text-[var(--muted-foreground)]">
+                    Yatay fotoğraflar otomatik bulanık arka plan ile gösterilir.
+                  </p>
+                )}
+              </div>
+
+              {/* Video dili */}
+              <div className="pt-2 space-y-3 border-t border-[var(--border)]">
+                <div className="demo-section-label flex items-center gap-2 pt-1">
+                  <Brain className="w-4 h-4 text-[var(--primary)]" />
+                  Video dili
+                </div>
+                <div className="text-xs text-[var(--muted-foreground)]">
+                  Videodaki yazılar bu dile göre hazırlanır. Seslendirme kapalı olsa da geçerlidir.
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {LANGUAGE_OPTIONS.map((opt) => {
+                    const active = videoLanguage === opt.code;
+                    return (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        onClick={() => onVideoLanguageChange(opt.code)}
+                        className={`px-4 py-2 rounded-[var(--radius-pill)] text-sm font-medium border transition-all ${
+                          active
+                            ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                            : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="pt-1 space-y-2">
+                  <div className="text-xs text-[var(--muted-foreground)]">
+                    Eklemek istediğin bir şey var mı? (opsiyonel)
+                  </div>
+                  <textarea
+                    value={videoNotes}
+                    onChange={(e) => onVideoNotesChange(e.target.value)}
+                    placeholder='Örn: "Daha agresif bir ton", "Fiyatı vurgula", "SUV aile aracı gibi anlat", "Minimal yazı"'
+                    className={`${INPUT_CLS} min-h-[90px] resize-y`}
+                  />
+                </div>
+              </div>
+
+              {/* Müzik */}
+              <div className="pt-2 space-y-3 border-t border-[var(--border)]">
+                <div className="demo-section-label flex items-center gap-2 pt-1">
+                  <Sparkles className="w-4 h-4 text-[var(--primary)]" />
+                  Müzik
+                </div>
+                <div className="text-xs text-[var(--muted-foreground)]">
+                  Arka plan müziği (telifsiz / lisanslı). Seslendirme açıksa otomatik kısılır.
+                </div>
+                <select
+                  value={musicTrackId}
+                  onChange={(e) => onMusicTrackIdChange(e.target.value as MusicTrackId)}
+                  className={INPUT_CLS}
+                >
+                  {MUSIC_TRACKS.map((t) => (
+                    <option key={t.id} value={t.id}>{t.label}</option>
+                  ))}
+                </select>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-[var(--muted-foreground)] w-[72px]">Seviye</span>
+                  <input
+                    type="range"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    value={musicVolume}
+                    onChange={(e) => onMusicVolumeChange(Number(e.target.value))}
+                    className="flex-1"
+                  />
+                  <span className="text-xs text-[var(--muted-foreground)] w-[44px] tabular-nums">
+                    {musicVolume.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Seslendirme */}
+              <div className="pt-2 space-y-3 border-t border-[var(--border)]">
+                <div className="demo-section-label flex items-center gap-2 pt-1">
+                  <Mic className="w-4 h-4 text-[var(--primary)]" />
+                  Seslendirme
+                </div>
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={voiceoverEnabled}
+                    onChange={(e) => onVoiceoverEnabledChange(e.target.checked)}
+                    className="mt-1 rounded border-[var(--border)]"
+                  />
+                  <span className="text-sm text-[var(--foreground)] leading-snug">
+                    Videoya AI seslendirmesi ekle (isteğe bağlı). Açıkken her sahne için söylenecek metin kurguda üretilir ve ses bitene kadar sahne uzatılabilir.
+                  </span>
+                </label>
+                <div className="text-xs text-[var(--muted-foreground)]">
+                  Seslendirme dili video diliyle aynıdır.
+                </div>
+              </div>
             </div>
 
             <button
               type="button"
-              onClick={onAnalyze}
+              onClick={onNext}
               disabled={!hasMedia}
               className={`w-full flex items-center justify-center gap-2 py-4 rounded-[var(--radius-pill)] font-semibold text-base transition-all ${
                 !hasMedia
@@ -710,16 +838,9 @@ function UploadStep({
                   : "bg-gradient-to-r from-[var(--teal)] to-[var(--primary)] text-[var(--primary-foreground)] shadow-lg shadow-[var(--primary)]/20 hover:opacity-95"
               }`}
             >
-              <Brain className="w-5 h-5" />
-              AI ile analiz et ve kurguyu oluştur
+              İleri — Araç bilgileri
               {hasMedia && <ChevronRight className="w-5 h-5" />}
             </button>
-
-            {hasMedia && (
-              <p className="text-center text-xs text-[var(--muted-foreground)]">
-                Claude: kategori, yorum ve sahne kurgusu (~30–40 sn)
-              </p>
-            )}
           </div>
 
           <aside className="lg:col-span-1 w-full">
@@ -748,6 +869,200 @@ function UploadStep({
         </div>
       </div>
     </>
+  );
+}
+
+/* ─── Identify adımı ────────────────────────────────────── */
+
+const INPUT_CLS = "w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/20 focus:border-[var(--ring)]";
+
+function IdentifyStep({
+  mediaItems, form, isIdentifying, onFormChange, onConfirm, onBack,
+}: {
+  mediaItems: MediaItem[];
+  form: FormData;
+  isIdentifying: boolean;
+  onFormChange: (field: keyof FormData, value: string) => void;
+  onConfirm: () => void;
+  onBack: () => void;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  return (
+    <div className="flex-1 overflow-auto px-4 py-6 sm:px-6 bg-[var(--background)]">
+      <div className="max-w-2xl mx-auto space-y-5">
+
+        {/* Başlık */}
+        <div>
+          <h2 className="text-lg font-bold text-[var(--foreground)]">Araç bilgilerini kontrol et</h2>
+          <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
+            AI fotoğraflardan bilgileri doldurdu — düzenleyip onaylayabilirsin.
+          </p>
+        </div>
+
+        {/* Küçük fotoğraf grid'i */}
+        {mediaItems.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {mediaItems.slice(0, 8).map((item, i) => (
+              <div
+                key={i}
+                className="w-14 h-14 rounded-[var(--radius)] overflow-hidden border border-[var(--border)] bg-[var(--muted)] shrink-0"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={item.src} alt="" className="w-full h-full object-cover" />
+              </div>
+            ))}
+            {mediaItems.length > 8 && (
+              <div className="w-14 h-14 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)] flex items-center justify-center shrink-0">
+                <span className="text-xs text-[var(--muted-foreground)] font-medium">+{mediaItems.length - 8}</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* AI yükleniyor banner'ı */}
+        {isIdentifying && (
+          <div className="flex items-center gap-3 rounded-[var(--radius)] border border-[var(--primary)]/30 bg-[var(--primary)]/[0.06] px-4 py-3">
+            <Loader2 className="w-4 h-4 text-[var(--primary)] animate-spin shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-[var(--primary)]">AI fotoğrafları inceliyor…</p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Bilgiler otomatik doldurulacak, düzenleyebilirsin.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Form */}
+        <div className={`demo-card p-5 space-y-4 transition-opacity ${isIdentifying ? "opacity-50 pointer-events-none" : ""}`}>
+
+          {/* Ana alanlar */}
+          <div>
+            <div className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Temel bilgiler</div>
+            <div className="grid grid-cols-2 gap-3">
+              {(["carBrand", "carModel", "year", "price"] as const).map((field) => (
+                <div key={field}>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">
+                    {field === "carBrand" ? "Marka" : field === "carModel" ? "Model" : field === "year" ? "Yıl" : "Fiyat"}
+                  </label>
+                  <input
+                    value={form[field]}
+                    onChange={(e) => onFormChange(field, e.target.value)}
+                    placeholder={field === "carBrand" ? "BMW" : field === "carModel" ? "320i" : field === "year" ? "2020" : "₺500.000"}
+                    className={INPUT_CLS}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Teknik alanlar */}
+          <div>
+            <div className="text-xs font-semibold text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Teknik bilgiler</div>
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  ["seri",      "Seri",        "3 Serisi"],
+                  ["km",        "KM",          "0 km"],
+                  ["motorGucu", "Motor Gücü",  "150 HP"],
+                  ["motorHacmi","Motor Hacmi", "1995 cc"],
+                  ["vites",     "Vites",       "Otomatik"],
+                  ["yakit",     "Yakıt Tipi",  "Benzin"],
+                ] as [keyof FormData, string, string][]
+              ).map(([field, label, placeholder]) => (
+                <div key={field}>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">{label}</label>
+                  <input
+                    value={form[field]}
+                    onChange={(e) => onFormChange(field, e.target.value)}
+                    placeholder={placeholder}
+                    className={INPUT_CLS}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Collapsible: Kasa tipi ve diğer detaylar */}
+          <div className="border-t border-[var(--border)] pt-3">
+            <button
+              type="button"
+              onClick={() => setDetailsOpen((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors w-full text-left"
+            >
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform shrink-0 ${detailsOpen ? "rotate-180" : ""}`} />
+              {detailsOpen ? "Daha az göster" : "Kasa tipi ve diğer detaylar"}
+            </button>
+            {detailsOpen && (
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                {(
+                  [
+                    ["kasa",             "Kasa Tipi",       "Sedan"],
+                    ["renk",             "Renk",            "Siyah"],
+                    ["cekis",            "Çekiş",           "Önden Çekiş"],
+                    ["motor",            "Motor",           "2.0L Benzin"],
+                    ["aracDurumu",       "Araç Durumu",     "İkinci El"],
+                    ["garanti",          "Garanti",         "Hayır"],
+                    ["agirHasarKayitli", "Ağır Hasar",      "Hayır"],
+                    ["plaka",            "Plaka / Uyruk",   "TR Plakalı"],
+                    ["ilanTarihi",       "İlan Tarihi",     ""],
+                  ] as [keyof FormData, string, string][]
+                ).map(([field, label, placeholder]) => (
+                  <div key={field}>
+                    <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">{label}</label>
+                    <input
+                      value={form[field]}
+                      onChange={(e) => onFormChange(field, e.target.value)}
+                      placeholder={placeholder}
+                      className={INPUT_CLS}
+                    />
+                  </div>
+                ))}
+                <div className="col-span-2">
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">
+                    <Phone className="w-3 h-3 inline mr-1" />
+                    Telefon (opsiyonel)
+                  </label>
+                  <input
+                    value={form.ctaPhone}
+                    onChange={(e) => onFormChange("ctaPhone", e.target.value)}
+                    placeholder="0532 123 45 67"
+                    className={INPUT_CLS}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Butonlar */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex items-center justify-center gap-2 py-3 px-5 rounded-[var(--radius-pill)] text-sm font-medium border border-[var(--border)] bg-[var(--muted)] text-[var(--foreground)] hover:bg-[var(--card)] transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Geri
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={isIdentifying}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius-pill)] font-semibold text-base transition-all ${
+              isIdentifying
+                ? "bg-[var(--muted)] text-[var(--muted-foreground)] cursor-not-allowed"
+                : "bg-gradient-to-r from-[var(--teal)] to-[var(--primary)] text-[var(--primary-foreground)] shadow-lg shadow-[var(--primary)]/20 hover:opacity-95"
+            }`}
+          >
+            <Brain className="w-5 h-5" />
+            Onayla ve kurguyu oluştur
+            {!isIdentifying && <ChevronRight className="w-5 h-5" />}
+          </button>
+        </div>
+        <p className="text-center text-xs text-[var(--muted-foreground)]">
+          Claude: kategori, yorum ve sahne kurgusu (~30–40 sn)
+        </p>
+      </div>
+    </div>
   );
 }
 
@@ -789,9 +1104,42 @@ function AnalyzingStep({ mediaItems, phase }: { mediaItems: MediaItem[]; phase: 
 
 /* ─── Preview adımı ──────────────────────────────────────── */
 
+/* ─── Blob URL → base64 data URL (render için) ───────────── */
+
+async function blobToDataUrl(url: string): Promise<string> {
+  if (!url.startsWith("blob:")) return url;
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Görseli canvas ile yeniden boyutlandır — büyük payload'u azaltır */
+async function resizeImage(dataUrl: string, maxPx = 1920): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width <= maxPx && height <= maxPx) { resolve(dataUrl); return; }
+      const scale = maxPx / Math.max(width, height);
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    img.src = dataUrl;
+  });
+}
+
 function PreviewStep({
-  mediaItems, form, totalFrames, analysisResult, aspectRatio, outroFrames, reelStyle,
-  voiceoverEnabled, voiceoverSync, ttsNotice, onReset,
+  mediaItems, form, totalFrames, analysisResult, aspectRatio, outroFrames, reelStyle, videoLanguage, musicTrackId, musicVolume,
+  voiceoverEnabled, voiceoverSync, ttsNotice, onReset, onVariantChange,
 }: {
   mediaItems: MediaItem[];
   form: FormData;
@@ -800,10 +1148,14 @@ function PreviewStep({
   aspectRatio: AspectRatioOption;
   outroFrames: number;
   reelStyle: ReelStyle;
+  videoLanguage: LanguageCode;
+  musicTrackId: MusicTrackId;
+  musicVolume: number;
   voiceoverEnabled: boolean;
   voiceoverSync: boolean;
   ttsNotice: string;
   onReset: () => void;
+  onVariantChange: (shotIndex: number, variant: SceneVariant) => void;
 }) {
   const durationSec = (totalFrames / FPS).toFixed(1);
   const dims = ASPECT_RATIO_DIMENSIONS[aspectRatio];
@@ -812,8 +1164,141 @@ function PreviewStep({
   const layout = aspectRatioToLayout(aspectRatio);
   const storyboard = analysisResult?.storyboard ?? [];
 
+  /* ─── Render & download ─────────────────────────────────── */
+  const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState("");
+  const [renderError, setRenderError] = useState("");
+
+  const handleDownload = async () => {
+    setIsRendering(true);
+    setRenderError("");
+    setRenderProgress("Görseller hazırlanıyor…");
+
+    try {
+      // Blob URL → base64 data URL dönüşümü (sunucu erişemez blob'lara)
+      const convertedItems = await Promise.all(
+        mediaItems.map(async (item) => {
+          const rawData = await blobToDataUrl(item.src);
+          const src = item.src.startsWith("blob:") ? await resizeImage(rawData) : rawData;
+          const audioSrc = item.audioSrc ? await blobToDataUrl(item.audioSrc) : undefined;
+          return { ...item, src, audioSrc };
+        })
+      );
+
+      // Müzik dosyası: /music/... → tam URL (renderer erişebilsin)
+      const bgmRaw = resolveMusicTrack(musicTrackId).src;
+      const bgmSrc = bgmRaw?.startsWith("/")
+        ? `${window.location.origin}${bgmRaw}`
+        : bgmRaw;
+
+      const inputProps = {
+        mediaItems: convertedItems,
+        carBrand: form.carBrand,
+        carModel: form.carModel,
+        year: form.year,
+        price: form.price,
+        galleryName: "CarStudio",
+        ctaPhone: form.ctaPhone || undefined,
+        km: form.km || undefined,
+        motor: form.motor || undefined,
+        renk: form.renk || undefined,
+        vites: form.vites || undefined,
+        yakit: form.yakit || undefined,
+        kasa: form.kasa || undefined,
+        seri: form.seri || undefined,
+        aracDurumu: form.aracDurumu || undefined,
+        motorGucu: form.motorGucu || undefined,
+        motorHacmi: form.motorHacmi || undefined,
+        cekis: form.cekis || undefined,
+        garanti: form.garanti || undefined,
+        agirHasarKayitli: form.agirHasarKayitli || undefined,
+        plaka: form.plaka || undefined,
+        ilanTarihi: form.ilanTarihi || undefined,
+        layout,
+        aspectRatio,
+        outroFrames,
+        reelStyle,
+        voiceoverSync,
+        videoLanguage,
+        bgmSrc,
+        bgmVolume: musicVolume,
+      };
+
+      setRenderProgress("Video render ediliyor… (1-4 dk sürebilir)");
+
+      const res = await fetch("/api/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inputProps,
+          width: compWidth,
+          height: compHeight,
+          fps: FPS,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.details || err.error || "Render API hatası");
+      }
+
+      setRenderProgress("İndiriliyor…");
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `carstudio-${form.carBrand}-${form.carModel}-${form.year}.mp4`
+        .replace(/\s+/g, "-")
+        .replace(/[^a-zA-Z0-9\-_.]/g, "")
+        .toLowerCase();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setRenderProgress("");
+    } catch (err) {
+      console.error("[download]", err);
+      setRenderError(String(err).replace(/^Error:\s*/, ""));
+    } finally {
+      setIsRendering(false);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-auto px-4 py-6 sm:p-6 bg-[var(--background)]">
+      {isRendering && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0b0b12]/90 p-6 shadow-2xl shadow-black/40">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-[var(--primary)]/15 border border-[var(--primary)]/25 flex items-center justify-center">
+                <Loader2 className="h-5 w-5 text-[var(--primary)] animate-spin" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-white">
+                  Videonuz indirilmeye hazırlanıyor…
+                </div>
+                <div className="text-xs text-white/70 mt-0.5">
+                  Lütfen bu sekmeyi kapatmayın.
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
+              <div className="text-xs text-white/75">
+                {renderProgress || "Başlatılıyor…"}
+              </div>
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-[var(--teal)] to-[var(--primary)] animate-pulse" />
+              </div>
+            </div>
+
+            <div className="mt-4 text-[11px] leading-relaxed text-white/60">
+              Bu işlem fotoğraf sayısına ve müzik/seslendirme kullanımına göre 1–4 dk sürebilir.
+            </div>
+          </div>
+        </div>
+      )}
       <div className="max-w-5xl mx-auto">
 
         <div className="mb-6 sm:mb-8 text-center">
@@ -893,6 +1378,9 @@ function PreviewStep({
                     outroFrames,
                     reelStyle,
                     voiceoverSync,
+                    videoLanguage,
+                    bgmSrc: resolveMusicTrack(musicTrackId).src,
+                    bgmVolume: musicVolume,
                   }}
                 />
               </div>
@@ -912,18 +1400,48 @@ function PreviewStep({
             )}
 
             {storyboard.length > 0 && (
-              <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 max-h-[420px] overflow-y-auto">
-                <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Sahne sırası &amp; yorum</div>
+              <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 max-h-[520px] overflow-y-auto">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider">Sahne sırası &amp; şablon</div>
+                  <div className="text-[10px] text-[var(--primary)] font-medium">Şablonu değiştir ↓</div>
+                </div>
                 <div className="space-y-3">
-                  {storyboard.map((shot, i) => (
+                  {storyboard.map((shot, i) => {
+                    const currentVariant = mediaItems[i]?.sceneVariant ?? shot.scene_variant as SceneVariant;
+                    return (
                     <div key={`${shot.source_index}-${i}`} className="border-b border-[var(--border)] last:border-0 pb-3 last:pb-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-mono text-[var(--muted-foreground)]">{shot.category_id}</span>
-                        <span className="text-[11px] font-semibold text-[var(--foreground)]">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[10px] font-mono text-[var(--muted-foreground)] shrink-0">#{i + 1}</span>
+                        <span className="text-[11px] font-semibold text-[var(--foreground)] truncate flex-1">
                           {categoryTitleTr(shot)}
                         </span>
+                        <span className="text-[10px] text-[var(--muted-foreground)] shrink-0">
+                          <Star className="w-2.5 h-2.5 inline text-amber-400 mr-0.5" />
+                          {shot.quality_score}/10
+                        </span>
                       </div>
-                      <p className="text-[11px] text-[var(--muted-foreground)] leading-snug">{shot.comment_tr}</p>
+
+                      {/* Şablon seçici */}
+                      <div className="mb-1.5">
+                        <select
+                          value={currentVariant ?? ""}
+                          onChange={(e) => onVariantChange(i, e.target.value as SceneVariant)}
+                          className="w-full text-[11px] font-medium bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)] rounded-lg px-2.5 py-1.5 pr-6 appearance-none cursor-pointer hover:border-[var(--primary)]/50 transition-colors focus:outline-none focus:ring-1 focus:ring-[var(--primary)]/40"
+                          style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}
+                        >
+                          {VARIANT_GROUPS.map((group) => (
+                            <optgroup key={group.label} label={group.label}>
+                              {group.variants.map((v) => (
+                                <option key={v} value={v}>{VARIANT_LABELS[v]}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                      </div>
+
+                      {shot.comment_tr && (
+                        <p className="text-[10px] text-[var(--muted-foreground)] leading-snug">{shot.comment_tr}</p>
+                      )}
                       {voiceoverEnabled && shot.voiceover_text && (
                         <p className="text-[11px] text-[var(--foreground)] leading-snug mt-1.5 pl-2 border-l-2 border-[var(--primary)]/40">
                           <span className="text-[10px] uppercase tracking-wider text-[var(--primary)] font-semibold">Seslendirme</span>
@@ -931,16 +1449,8 @@ function PreviewStep({
                           {shot.voiceover_text}
                         </p>
                       )}
-                      <div className="flex items-center gap-3 mt-1.5">
-                        <span className="text-[10px] text-[var(--muted-foreground)]">
-                          <Star className="w-2.5 h-2.5 inline text-amber-400 mr-0.5" />
-                          {shot.quality_score}/10
-                        </span>
-                        <span className="text-[10px] text-[var(--muted-foreground)]">{shot.lighting}</span>
-                        <span className="text-[10px] text-[var(--muted-foreground)] font-mono">{shot.scene_variant}</span>
-                      </div>
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
@@ -976,6 +1486,36 @@ function PreviewStep({
                   </span>
                 ))}
               </div>
+            </div>
+
+            {/* İndir butonu */}
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={handleDownload}
+                disabled={isRendering}
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-[var(--primary-foreground)] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-[var(--primary)]/25"
+              >
+                {isRendering ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    {renderProgress || "Hazırlanıyor…"}
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Video İndir (.mp4)
+                  </>
+                )}
+              </button>
+              {renderError && (
+                <p className="text-xs text-[var(--destructive)] leading-snug px-1">{renderError}</p>
+              )}
+              {isRendering && (
+                <p className="text-[10px] text-[var(--muted-foreground)] text-center px-2">
+                  Render sunucuda yapılıyor — lütfen sayfayı kapatmayın.
+                </p>
+              )}
             </div>
 
             <button

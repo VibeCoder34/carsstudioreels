@@ -17,15 +17,35 @@ export type ElevenLabsVoiceSettings = {
   use_speaker_boost?: boolean;
 };
 
-/** Desteklenen seslendirme dilleri (yalnızca TR / EN). */
-export type TtsLanguage = "tr" | "en";
+/** Desteklenen seslendirme dilleri. */
+export type TtsLanguage = "tr" | "en" | "es" | "fr" | "de" | "it" | "ru" | "pt";
 
-export const TTS_LANGUAGES: readonly TtsLanguage[] = ["tr", "en"];
+export const TTS_LANGUAGES: readonly TtsLanguage[] = [
+  "tr",
+  "en",
+  "es",
+  "fr",
+  "de",
+  "it",
+  "ru",
+  "pt",
+];
 
 export function parseTtsLanguage(raw: unknown): TtsLanguage {
-  if (raw === "tr" || raw === "en") return raw;
+  if (
+    raw === "tr" ||
+    raw === "en" ||
+    raw === "es" ||
+    raw === "fr" ||
+    raw === "de" ||
+    raw === "it" ||
+    raw === "ru" ||
+    raw === "pt"
+  ) {
+    return raw;
+  }
   if (raw === undefined || raw === null || raw === "") return "tr";
-  throw new Error('Invalid language: use "tr" or "en"');
+  throw new Error('Invalid language: use one of "tr", "en", "es", "fr", "de", "it", "ru", "pt"');
 }
 
 export type ElevenLabsTtsRequest = {
@@ -98,11 +118,9 @@ export type ElevenLabsConfig = {
   baseUrl: string;
   /** Tek voice ile her iki dil (önerilmez); dil bazlı voice yoksa fallback. */
   defaultVoiceId: string | undefined;
-  voiceIdTr: string | undefined;
-  voiceIdEn: string | undefined;
+  voiceIdByLanguage: Partial<Record<TtsLanguage, string>>;
   defaultModelId: ElevenLabsModelId | undefined;
-  modelIdTr: ElevenLabsModelId | undefined;
-  modelIdEn: ElevenLabsModelId | undefined;
+  modelIdByLanguage: Partial<Record<TtsLanguage, ElevenLabsModelId>>;
   defaultOutputFormat: ElevenLabsOutputFormat | undefined;
   defaultLanguage: TtsLanguage;
 };
@@ -111,24 +129,40 @@ export function getElevenLabsConfig(): ElevenLabsConfig {
   const apiKey = getEnv("ELEVENLABS_API_KEY");
   const baseUrl = getEnv("ELEVENLABS_BASE_URL") ?? "https://api.elevenlabs.io";
   const defaultVoiceId = getEnv("ELEVENLABS_VOICE_ID");
-  const voiceIdTr = getEnv("ELEVENLABS_VOICE_ID_TR");
-  const voiceIdEn = getEnv("ELEVENLABS_VOICE_ID_EN");
   const defaultModelId = getEnv("ELEVENLABS_MODEL_ID") as ElevenLabsModelId | undefined;
-  const modelIdTr = getEnv("ELEVENLABS_MODEL_ID_TR") as ElevenLabsModelId | undefined;
-  const modelIdEn = getEnv("ELEVENLABS_MODEL_ID_EN") as ElevenLabsModelId | undefined;
   const defaultOutputFormat = getEnv("ELEVENLABS_OUTPUT_FORMAT") as ElevenLabsOutputFormat | undefined;
   const dl = getEnv("ELEVENLABS_DEFAULT_LANGUAGE")?.toLowerCase();
   const defaultLanguage: TtsLanguage = dl === "en" ? "en" : "tr";
+
+  const voiceIdByLanguage: Partial<Record<TtsLanguage, string>> = {
+    tr: getEnv("ELEVENLABS_VOICE_ID_TR"),
+    en: getEnv("ELEVENLABS_VOICE_ID_EN"),
+    es: getEnv("ELEVENLABS_VOICE_ID_ES"),
+    fr: getEnv("ELEVENLABS_VOICE_ID_FR"),
+    de: getEnv("ELEVENLABS_VOICE_ID_DE"),
+    it: getEnv("ELEVENLABS_VOICE_ID_IT"),
+    ru: getEnv("ELEVENLABS_VOICE_ID_RU"),
+    pt: getEnv("ELEVENLABS_VOICE_ID_PT"),
+  };
+
+  const modelIdByLanguage: Partial<Record<TtsLanguage, ElevenLabsModelId>> = {
+    tr: getEnv("ELEVENLABS_MODEL_ID_TR") as ElevenLabsModelId | undefined,
+    en: getEnv("ELEVENLABS_MODEL_ID_EN") as ElevenLabsModelId | undefined,
+    es: getEnv("ELEVENLABS_MODEL_ID_ES") as ElevenLabsModelId | undefined,
+    fr: getEnv("ELEVENLABS_MODEL_ID_FR") as ElevenLabsModelId | undefined,
+    de: getEnv("ELEVENLABS_MODEL_ID_DE") as ElevenLabsModelId | undefined,
+    it: getEnv("ELEVENLABS_MODEL_ID_IT") as ElevenLabsModelId | undefined,
+    ru: getEnv("ELEVENLABS_MODEL_ID_RU") as ElevenLabsModelId | undefined,
+    pt: getEnv("ELEVENLABS_MODEL_ID_PT") as ElevenLabsModelId | undefined,
+  };
 
   return {
     apiKey,
     baseUrl,
     defaultVoiceId,
-    voiceIdTr,
-    voiceIdEn,
+    voiceIdByLanguage,
     defaultModelId,
-    modelIdTr,
-    modelIdEn,
+    modelIdByLanguage,
     defaultOutputFormat,
     defaultLanguage,
   };
@@ -136,13 +170,13 @@ export function getElevenLabsConfig(): ElevenLabsConfig {
 
 /** Dil için voice: önce dil-özel env, sonra genel ELEVENLABS_VOICE_ID. */
 export function resolveVoiceIdForLanguage(lang: TtsLanguage, cfg: ElevenLabsConfig): string | undefined {
-  const specific = lang === "tr" ? cfg.voiceIdTr : cfg.voiceIdEn;
+  const specific = cfg.voiceIdByLanguage[lang];
   return (specific ?? cfg.defaultVoiceId)?.trim() || undefined;
 }
 
 /** Dil için model: önce dil-özel env, sonra ELEVENLABS_MODEL_ID. */
 export function resolveModelIdForLanguage(lang: TtsLanguage, cfg: ElevenLabsConfig): ElevenLabsModelId | undefined {
-  const specific = lang === "tr" ? cfg.modelIdTr : cfg.modelIdEn;
+  const specific = cfg.modelIdByLanguage[lang];
   return specific ?? cfg.defaultModelId;
 }
 

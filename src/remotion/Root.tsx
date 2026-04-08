@@ -1,5 +1,12 @@
 import { Composition } from "remotion";
-import { PrestigeReels, getTotalFrames, type PrestigeReelsProps, type MediaItem } from "./PrestigeReels";
+import {
+  PrestigeReels,
+  STYLE_PRESETS,
+  getTotalFrames,
+  type PrestigeReelsProps,
+  type MediaItem,
+  type ReelStyle,
+} from "./PrestigeReels";
 
 const TEST_ITEMS: MediaItem[] = [
   { src: "https://images.unsplash.com/photo-1555215695-3004980ad54e?w=1080&q=90", type: "image" },
@@ -27,6 +34,14 @@ export const RemotionRoot: React.FC = () => {
       width={1920}
       height={1080}
       defaultProps={{ ...defaultProps, layout: "landscape" }}
+      calculateMetadata={({ props }) => {
+        const reelStyle = (props.reelStyle ?? "cinematic") as ReelStyle;
+        const basePreset = STYLE_PRESETS[reelStyle];
+        const crossfadeFrames = (props.voiceoverSync ? 0 : basePreset.crossfadeFrames) ?? basePreset.crossfadeFrames;
+        const outroFrames = props.outroFrames;
+        const durationInFrames = getTotalFrames(props.mediaItems, { outroFrames, crossfadeFrames });
+        return { durationInFrames };
+      }}
     />
   );
 };

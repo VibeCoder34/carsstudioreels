@@ -10,6 +10,7 @@ import {
   spring,
 } from "remotion";
 import type { SceneVariant } from "@/lib/photoCategories";
+import type { LanguageCode } from "@/lib/languages";
 
 /* ─── Tipler ─────────────────────────────────────────────── */
 
@@ -62,6 +63,12 @@ export type PrestigeReelsProps = {
   price: string;
   galleryName: string;
   ctaPhone?: string;
+  /** Videodaki sabit metinlerin dili (etiketler, fallback'ler). */
+  videoLanguage?: LanguageCode;
+  /** Arka plan müziği (public path). Örn: "/music/smooth-01.mp3" */
+  bgmSrc?: string;
+  /** 0–1 arası. */
+  bgmVolume?: number;
   layout?: "portrait" | "landscape";
   /** Çıktı formatı — layout'tan önce gelir */
   aspectRatio?: AspectRatioOption;
@@ -96,6 +103,273 @@ export const PHOTO_FRAMES = 90;
 export const VIDEO_FRAMES = 150;
 export const CROSSFADE_FRAMES = 20;
 export const OUTRO_FRAMES = 90;
+
+type VideoLanguage = LanguageCode;
+
+const VIDEO_I18N: Record<
+  VideoLanguage,
+  {
+    contact: string;
+    detailedInfoContact: string;
+    vehicleDetail: string;
+    modelYear: string;
+    vehicleCondition: string;
+    salePrice: string;
+    labels: {
+      km: string;
+      gearbox: string;
+      fuel: string;
+      body: string;
+      price: string;
+      enginePower: string;
+      engineDisplacement: string;
+      drivetrain: string;
+      color: string;
+    };
+  }
+> = {
+  tr: {
+    contact: "İletişime Geç",
+    detailedInfoContact: "Detaylı bilgi için iletişime geçin",
+    vehicleDetail: "Araç Detayı",
+    modelYear: "Model Yılı",
+    vehicleCondition: "Araç Durumu",
+    salePrice: "Satış Fiyatı",
+    labels: {
+      km: "KM",
+      gearbox: "VİTES",
+      fuel: "YAKIT",
+      body: "KASA",
+      price: "FİYAT",
+      enginePower: "MOTOR GÜCÜ",
+      engineDisplacement: "MOTOR HACMİ",
+      drivetrain: "ÇEKİŞ",
+      color: "RENK",
+    },
+  },
+  en: {
+    contact: "Contact",
+    detailedInfoContact: "Contact us for details",
+    vehicleDetail: "Vehicle Detail",
+    modelYear: "Model Year",
+    vehicleCondition: "Condition",
+    salePrice: "Sale Price",
+    labels: {
+      km: "KM",
+      gearbox: "GEARBOX",
+      fuel: "FUEL",
+      body: "BODY",
+      price: "PRICE",
+      enginePower: "POWER",
+      engineDisplacement: "DISPLACEMENT",
+      drivetrain: "DRIVETRAIN",
+      color: "COLOR",
+    },
+  },
+  es: {
+    contact: "Contacto",
+    detailedInfoContact: "Contáctanos para más detalles",
+    vehicleDetail: "Detalle del vehículo",
+    modelYear: "Año modelo",
+    vehicleCondition: "Estado",
+    salePrice: "Precio",
+    labels: {
+      km: "KM",
+      gearbox: "CAJA",
+      fuel: "COMBUSTIBLE",
+      body: "CARROCERÍA",
+      price: "PRECIO",
+      enginePower: "POTENCIA",
+      engineDisplacement: "CILINDRADA",
+      drivetrain: "TRACCIÓN",
+      color: "COLOR",
+    },
+  },
+  fr: {
+    contact: "Contact",
+    detailedInfoContact: "Contactez-nous pour plus d'infos",
+    vehicleDetail: "Détail du véhicule",
+    modelYear: "Année-modèle",
+    vehicleCondition: "État",
+    salePrice: "Prix",
+    labels: {
+      km: "KM",
+      gearbox: "BOÎTE",
+      fuel: "CARBURANT",
+      body: "CARROSSERIE",
+      price: "PRIX",
+      enginePower: "PUISSANCE",
+      engineDisplacement: "CYLINDRÉE",
+      drivetrain: "TRANSMISSION",
+      color: "COULEUR",
+    },
+  },
+  de: {
+    contact: "Kontakt",
+    detailedInfoContact: "Für Details kontaktieren",
+    vehicleDetail: "Fahrzeugdetails",
+    modelYear: "Modelljahr",
+    vehicleCondition: "Zustand",
+    salePrice: "Preis",
+    labels: {
+      km: "KM",
+      gearbox: "GETRIEBE",
+      fuel: "KRAFTSTOFF",
+      body: "KAROSSERIE",
+      price: "PREIS",
+      enginePower: "LEISTUNG",
+      engineDisplacement: "HUBRAUM",
+      drivetrain: "ANTRIEB",
+      color: "FARBE",
+    },
+  },
+  it: {
+    contact: "Contatto",
+    detailedInfoContact: "Contattaci per i dettagli",
+    vehicleDetail: "Dettaglio veicolo",
+    modelYear: "Anno modello",
+    vehicleCondition: "Condizioni",
+    salePrice: "Prezzo",
+    labels: {
+      km: "KM",
+      gearbox: "CAMBIO",
+      fuel: "CARBURANTE",
+      body: "CARROZZERIA",
+      price: "PREZZO",
+      enginePower: "POTENZA",
+      engineDisplacement: "CILINDRATA",
+      drivetrain: "TRAZIONE",
+      color: "COLORE",
+    },
+  },
+  ru: {
+    contact: "Контакты",
+    detailedInfoContact: "Свяжитесь для подробностей",
+    vehicleDetail: "Детали авто",
+    modelYear: "Год выпуска",
+    vehicleCondition: "Состояние",
+    salePrice: "Цена",
+    labels: {
+      km: "KM",
+      gearbox: "КОРОБКА",
+      fuel: "ТОПЛИВО",
+      body: "КУЗОВ",
+      price: "ЦЕНА",
+      enginePower: "МОЩНОСТЬ",
+      engineDisplacement: "ОБЪЁМ",
+      drivetrain: "ПРИВОД",
+      color: "ЦВЕТ",
+    },
+  },
+  pt: {
+    contact: "Contato",
+    detailedInfoContact: "Fale conosco para detalhes",
+    vehicleDetail: "Detalhe do veículo",
+    modelYear: "Ano-modelo",
+    vehicleCondition: "Condição",
+    salePrice: "Preço",
+    labels: {
+      km: "KM",
+      gearbox: "CÂMBIO",
+      fuel: "COMBUSTÍVEL",
+      body: "CARROCERIA",
+      price: "PREÇO",
+      enginePower: "POTÊNCIA",
+      engineDisplacement: "CILINDRADA",
+      drivetrain: "TRAÇÃO",
+      color: "COR",
+    },
+  },
+};
+
+function vtxt(lang: VideoLanguage, key: keyof (typeof VIDEO_I18N)["tr"]) {
+  return (VIDEO_I18N[lang] ?? VIDEO_I18N.tr)[key];
+}
+
+const LABEL_SHADOW = "0 2px 10px rgba(0,0,0,0.65)";
+const LABEL_COLOR = "rgba(255,255,255,0.78)";
+const LABEL_COLOR_SOFT = "rgba(255,255,255,0.70)";
+
+function normKey(s: string): string {
+  return s
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/ı/g, "i")
+    .replace(/İ/g, "i")
+    .replace(/ş/g, "s")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c");
+}
+
+function translateEnumValue(lang: VideoLanguage, kind: "gearbox" | "fuel" | "drivetrain" | "body" | "condition" | "color", value?: string): string | undefined {
+  const v = value?.trim();
+  if (!v) return value;
+  if (lang === "tr") return value;
+
+  const k = normKey(v);
+
+  const map = (dict: Record<string, Partial<Record<VideoLanguage, string>>>): string | undefined =>
+    dict[k]?.[lang] ?? undefined;
+
+  const gearbox = map({
+    manuel: { en: "Manual", es: "Manual", fr: "Manuelle", de: "Schaltgetriebe", it: "Manuale", ru: "Механика", pt: "Manual" },
+    otomatik: { en: "Automatic", es: "Automático", fr: "Automatique", de: "Automatik", it: "Automatico", ru: "Автомат", pt: "Automático" },
+    "yari otomatik": { en: "Semi-automatic", es: "Semiautomático", fr: "Semi-automatique", de: "Halbautomatik", it: "Semiautomatico", ru: "Робот", pt: "Semiautomático" },
+  });
+
+  const fuel = map({
+    benzin: { en: "Petrol", es: "Gasolina", fr: "Essence", de: "Benzin", it: "Benzina", ru: "Бензин", pt: "Gasolina" },
+    dizel: { en: "Diesel", es: "Diésel", fr: "Diesel", de: "Diesel", it: "Diesel", ru: "Дизель", pt: "Diesel" },
+    lpg: { en: "LPG", es: "GLP", fr: "GPL", de: "LPG", it: "GPL", ru: "ГБО", pt: "GLP" },
+    "benzin & lpg": { en: "Petrol & LPG", es: "Gasolina y GLP", fr: "Essence & GPL", de: "Benzin & LPG", it: "Benzina & GPL", ru: "Бензин + ГБО", pt: "Gasolina & GLP" },
+    elektrik: { en: "Electric", es: "Eléctrico", fr: "Électrique", de: "Elektro", it: "Elettrico", ru: "Электро", pt: "Elétrico" },
+    hibrit: { en: "Hybrid", es: "Híbrido", fr: "Hybride", de: "Hybrid", it: "Ibrido", ru: "Гибрид", pt: "Híbrido" },
+  });
+
+  const drivetrain = map({
+    "onden cekis": { en: "FWD", es: "Tracción delantera", fr: "Traction avant", de: "Frontantrieb", it: "Trazione anteriore", ru: "Передний привод", pt: "Tração dianteira" },
+    "arkadan itis": { en: "RWD", es: "Tracción trasera", fr: "Propulsion", de: "Heckantrieb", it: "Trazione posteriore", ru: "Задний привод", pt: "Tração traseira" },
+    "4x4": { en: "4x4", es: "4x4", fr: "4x4", de: "4x4", it: "4x4", ru: "4x4", pt: "4x4" },
+    awd: { en: "AWD", es: "AWD", fr: "AWD", de: "AWD", it: "AWD", ru: "AWD", pt: "AWD" },
+  });
+
+  const condition = map({
+    "ikinci el": { en: "Used", es: "De segunda mano", fr: "Occasion", de: "Gebraucht", it: "Usato", ru: "С пробегом", pt: "Usado" },
+    sifir: { en: "New", es: "Nuevo", fr: "Neuf", de: "Neu", it: "Nuovo", ru: "Новый", pt: "Novo" },
+  });
+
+  const body = map({
+    sedan: { en: "Sedan", es: "Sedán", fr: "Berline", de: "Limousine", it: "Berlina", ru: "Седан", pt: "Sedã" },
+    hatchback: { en: "Hatchback", es: "Hatchback", fr: "Compacte", de: "Kompakt", it: "Hatchback", ru: "Хэтчбек", pt: "Hatchback" },
+    suv: { en: "SUV", es: "SUV", fr: "SUV", de: "SUV", it: "SUV", ru: "SUV", pt: "SUV" },
+    coupe: { en: "Coupe", es: "Coupé", fr: "Coupé", de: "Coupé", it: "Coupé", ru: "Купе", pt: "Coupé" },
+    cabrio: { en: "Convertible", es: "Cabrio", fr: "Cabriolet", de: "Cabrio", it: "Cabrio", ru: "Кабриолет", pt: "Conversível" },
+    "station wagon": { en: "Wagon", es: "Familiar", fr: "Break", de: "Kombi", it: "Station wagon", ru: "Универсал", pt: "Perua" },
+  });
+
+  const color = map({
+    siyah: { en: "Black", es: "Negro", fr: "Noir", de: "Schwarz", it: "Nero", ru: "Чёрный", pt: "Preto" },
+    beyaz: { en: "White", es: "Blanco", fr: "Blanc", de: "Weiß", it: "Bianco", ru: "Белый", pt: "Branco" },
+    gri: { en: "Grey", es: "Gris", fr: "Gris", de: "Grau", it: "Grigio", ru: "Серый", pt: "Cinza" },
+    gumus: { en: "Silver", es: "Plateado", fr: "Argent", de: "Silber", it: "Argento", ru: "Серебристый", pt: "Prata" },
+    kirmizi: { en: "Red", es: "Rojo", fr: "Rouge", de: "Rot", it: "Rosso", ru: "Красный", pt: "Vermelho" },
+    mavi: { en: "Blue", es: "Azul", fr: "Bleu", de: "Blau", it: "Blu", ru: "Синий", pt: "Azul" },
+  });
+
+  const out =
+    kind === "gearbox" ? gearbox :
+    kind === "fuel" ? fuel :
+    kind === "drivetrain" ? drivetrain :
+    kind === "condition" ? condition :
+    kind === "body" ? body :
+    kind === "color" ? color :
+    undefined;
+
+  return out ?? value;
+}
 
 /* ─── Yardımcı fonksiyonlar ──────────────────────────────── */
 
@@ -595,7 +869,7 @@ function SpecTableOverlay({
               fontSize: 12,
               fontWeight: 700,
               letterSpacing: "0.20em",
-              color: "rgba(255,255,255,0.48)",
+              color: "rgba(255,255,255,0.72)",
               textTransform: "uppercase",
             }}
           >
@@ -690,8 +964,8 @@ function SpecTableOverlay({
                   style={{
                     fontFamily: "sans-serif",
                     fontSize: 11,
-                    fontWeight: 400,
-                    color: "rgba(255,255,255,0.34)",
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.60)",
                     letterSpacing: "0.10em",
                     textTransform: "uppercase",
                     width: 148,
@@ -770,6 +1044,7 @@ function MediaSlide({
   carModel,
   year,
   price,
+  videoLanguage,
   aspectRatio,
   km,
   motor,
@@ -795,6 +1070,7 @@ function MediaSlide({
   carModel: string;
   year: string;
   price: string;
+  videoLanguage: VideoLanguage;
   aspectRatio?: AspectRatioOption;
   km?: string;
   motor?: string;
@@ -812,6 +1088,13 @@ function MediaSlide({
   plaka?: string;
   ilanTarihi?: string;
 }) {
+  const vitesT = translateEnumValue(videoLanguage, "gearbox", vites);
+  const yakitT = translateEnumValue(videoLanguage, "fuel", yakit);
+  const cekisT = translateEnumValue(videoLanguage, "drivetrain", cekis);
+  const kasaT = translateEnumValue(videoLanguage, "body", kasa);
+  const aracDurumuT = translateEnumValue(videoLanguage, "condition", aracDurumu);
+  const renkT = translateEnumValue(videoLanguage, "color", renk);
+
   const frame = useCurrentFrame();
   const startFrame = getItemStartFrame(items, index, preset.crossfadeFrames);
   const duration = getItemDuration(item);
@@ -1001,11 +1284,12 @@ function MediaSlide({
 
   // ─── split_specs: Sol görsel + sağ spec paneli ────────────
   if (sceneVariant === "split_specs") {
+    const L = (VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr).labels;
     const specs = [
-      { label: "KM",          value: km       || "—",  highlight: false },
-      { label: "MOTOR GÜCÜ",  value: motorGucu || motor || "—", highlight: false },
-      { label: "MOTOR HACMİ", value: motorHacmi || "—", highlight: false },
-      { label: "FİYAT",       value: price,             highlight: true  },
+      { label: L.km,                 value: km       || "—",  highlight: false },
+      { label: L.enginePower,        value: motorGucu || motor || "—", highlight: false },
+      { label: L.engineDisplacement, value: motorHacmi || "—", highlight: false },
+      { label: L.price,              value: price,             highlight: true  },
     ];
 
     return (
@@ -1081,7 +1365,7 @@ function MediaSlide({
                     fontFamily: "sans-serif",
                     fontSize: 11,
                     letterSpacing: "0.16em",
-                    color: "rgba(255,255,255,0.32)",
+                    color: "rgba(255,255,255,0.62)",
                     textTransform: "uppercase",
                     marginBottom: 8,
                   }}
@@ -1163,7 +1447,7 @@ function MediaSlide({
           <div style={{ width: lineW, height: 2, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.12))", marginBottom: 22 }} />
           <div style={{ opacity: titleOp, transform: `translateX(${titleX}px)`, display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
             <div style={{ width: 3, height: 22, background: "#f8c96a", borderRadius: 2, boxShadow: "0 0 14px rgba(248,201,106,0.6)" }} />
-            <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.20em", color: "rgba(255,255,255,0.42)", textTransform: "uppercase" }}>
+            <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.20em", color: "rgba(255,255,255,0.70)", textTransform: "uppercase" }}>
               {title}
             </span>
           </div>
@@ -1205,7 +1489,7 @@ function MediaSlide({
                     paddingTop: 13, paddingBottom: 13,
                     borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
                   }}>
-                    <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.14em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 8 }}>
+                    <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.14em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", marginBottom: 8 }}>
                       {row.label}
                     </div>
                     {row.barPct !== undefined ? (
@@ -1234,15 +1518,16 @@ function MediaSlide({
 
   // ─── card_panel: Yuvarlak köşeli foto kartı + veri paneli ──
   if (sceneVariant === "card_panel") {
+    const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
     // Gerçek araç verisi varsa önce onu kullan; yoksa SPEC_DATA'ya dön
     const realEngineRows: SpecRow[] | null = (motorGucu || motorHacmi || cekis || yakit)
       ? [
-          motorGucu  ? { label: "Motor Gücü",   value: motorGucu  } : null,
-          motorHacmi ? { label: "Motor Hacmi",  value: motorHacmi } : null,
-          cekis      ? { label: "Çekiş",         value: cekis      } : null,
-          yakit      ? { label: "Yakıt",         value: yakit      } : null,
-          vites      ? { label: "Vites",         value: vites      } : null,
-          km         ? { label: "KM",            value: km,        barPct: undefined } : null,
+          motorGucu  ? { label: T.labels.enginePower,        value: motorGucu  } : null,
+          motorHacmi ? { label: T.labels.engineDisplacement, value: motorHacmi } : null,
+          cekis      ? { label: T.labels.drivetrain,         value: cekisT      } : null,
+          yakit      ? { label: T.labels.fuel,               value: yakitT      } : null,
+          vites      ? { label: T.labels.gearbox,            value: vitesT      } : null,
+          km         ? { label: T.labels.km,                 value: km,         barPct: undefined } : null,
         ].filter(Boolean) as SpecRow[]
       : null;
 
@@ -1284,7 +1569,7 @@ function MediaSlide({
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: "55%", display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 72px 0 44px" }}>
           <div style={{ width: lineW, height: 2, background: "#f8c96a", borderRadius: 1, marginBottom: 24, boxShadow: "0 0 14px rgba(248,201,106,0.55)" }} />
           <div style={{ opacity: titleOp, transform: `translateX(${titleX}px)`, marginBottom: 32 }}>
-            <span style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase" }}>{title}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>{title}</span>
           </div>
 
           {isChecklist ? (
@@ -1315,7 +1600,7 @@ function MediaSlide({
                   : 0;
                 return (
                   <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, paddingTop: 12, paddingBottom: 12, borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}>
-                    <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.14em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 8 }}>{row.label}</div>
+                    <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 8 }}>{row.label}</div>
                     {row.barPct !== undefined ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                         <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
@@ -1369,7 +1654,7 @@ function MediaSlide({
             {cat ?? carBrand}
           </span>
           <div style={{ marginLeft: 28, flex: 1, height: 1, background: "linear-gradient(to right, rgba(248,201,106,0.28), transparent)" }} />
-          <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 300, letterSpacing: "0.14em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase" }}>
+          <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 500, letterSpacing: "0.14em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", textShadow: LABEL_SHADOW }}>
             {carBrand} · {year}
           </span>
         </div>
@@ -1392,7 +1677,7 @@ function MediaSlide({
               <div key={si} style={{ display: "flex", alignItems: "center" }}>
                 {si > 0 && <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.08)", margin: "0 40px" }} />}
                 <div style={{ opacity: sOp, transform: `translateY(${sY}px)` }}>
-                  <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.18em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 6 }}>{stat.label}</div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.18em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", marginBottom: 6, textShadow: LABEL_SHADOW }}>{stat.label}</div>
                   <div style={{ fontFamily: "sans-serif", fontSize: si === 3 ? 22 : 17, fontWeight: si === 3 ? 700 : 500, color: si === 3 ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: "0.02em" }}>{stat.value}</div>
                 </div>
               </div>
@@ -1448,7 +1733,7 @@ function MediaSlide({
                   <div style={{ fontFamily: "sans-serif", fontSize: 56, fontWeight: 800, color: "#f8c96a", letterSpacing: "-1px", lineHeight: 1, textShadow: "0 0 48px rgba(248,201,106,0.38)" }}>
                     {stat.value}
                   </div>
-                  <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.15em", color: "rgba(255,255,255,0.32)", textTransform: "uppercase", marginTop: 12 }}>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: "0.14em", color: LABEL_COLOR, textTransform: "uppercase", marginTop: 12, textShadow: LABEL_SHADOW }}>
                     {stat.label}
                   </div>
                 </div>
@@ -1606,6 +1891,7 @@ function MediaSlide({
 
   // ─── framed_center: Fotoğraf üstte küçük kart, altı geniş içerik ──
   if (sceneVariant === "framed_center") {
+    const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
     const cardOp  = interpolate(localFrame, [0, 22], [0, 1], { extrapolateRight: "clamp" });
     const cardY   = interpolate(localFrame, [0, 22], [20, 0], { extrapolateRight: "clamp", easing: easeOut });
     const t1Op    = interpolate(localFrame, [16, 32], [0, 1], { extrapolateRight: "clamp" });
@@ -1654,19 +1940,19 @@ function MediaSlide({
           {/* Yıl + Araç Durumu + Fiyat satırı */}
           <div style={{ opacity: t2Op, transform: `translateX(${slideX * 0.6}px)`, display: "flex", alignItems: "center", gap: 24, marginBottom: 14, flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 4 }}>Model Yılı</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.modelYear}</div>
               <div style={{ fontFamily: "sans-serif", fontSize: 20, fontWeight: 700, color: "rgba(255,255,255,0.88)" }}>{year}</div>
             </div>
             {aracDurumu && <>
               <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
               <div>
-                <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 4 }}>Araç Durumu</div>
-                <div style={{ fontFamily: "sans-serif", fontSize: 18, fontWeight: 600, color: "rgba(255,255,255,0.80)" }}>{aracDurumu}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.vehicleCondition}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: 18, fontWeight: 600, color: "rgba(255,255,255,0.80)" }}>{aracDurumuT}</div>
               </div>
             </>}
             <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
             <div>
-              <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 4 }}>Satış Fiyatı</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.salePrice}</div>
               <div style={{ fontFamily: "sans-serif", fontSize: 24, fontWeight: 700, color: "#f8c96a", textShadow: "0 0 18px rgba(248,201,106,0.38)" }}>{price}</div>
             </div>
           </div>
@@ -1675,11 +1961,11 @@ function MediaSlide({
           <div style={{ opacity: t3Op, display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{ width: 3, height: 14, background: "#f8c96a", borderRadius: 2, flexShrink: 0 }} />
             {(motorGucu || motor || km) ? (
-              <span style={{ fontFamily: "sans-serif", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.52)", letterSpacing: "0.04em" }}>
-                {[motorGucu || motor, km, kasa].filter(Boolean).join("  ·  ")}
+              <span style={{ fontFamily: "sans-serif", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.75)", letterSpacing: "0.04em" }}>
+                {[motorGucu || motor, km, kasaT].filter(Boolean).join("  ·  ")}
               </span>
             ) : (
-              <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 400, color: "rgba(255,255,255,0.32)", letterSpacing: "0.08em" }}>Detaylı bilgi için iletişime geçin</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 400, color: "rgba(255,255,255,0.32)", letterSpacing: "0.08em" }}>{T.detailedInfoContact}</span>
             )}
           </div>
         </div>
@@ -1689,6 +1975,7 @@ function MediaSlide({
 
   // ─── listing_panel: Sol küçük foto + sağ zengin bilgi paneli ───
   if (sceneVariant === "listing_panel") {
+    const L = (VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr).labels;
     const photoOp  = interpolate(localFrame, [0, 22], [0, 1], { extrapolateRight: "clamp" });
     const photoX   = interpolate(localFrame, [0, 22], [-44, 0], { extrapolateRight: "clamp", easing: easeOut });
     const r1Op     = interpolate(localFrame, [12, 28], [0, 1], { extrapolateRight: "clamp" });
@@ -1698,10 +1985,10 @@ function MediaSlide({
     const lineW    = interpolate(localFrame, [6, 26], [0, 56], { extrapolateRight: "clamp" });
 
     const infoRows = [
-      { label: "KM",       value: km || "—",    gold: false, op: r1Op },
-      { label: "VİTES",    value: vites || "—", gold: false, op: r2Op },
-      { label: "YAKIT",    value: yakit || "—", gold: false, op: r3Op },
-      { label: "KASA",     value: kasa || "—",  gold: true,  op: r4Op },
+      { label: L.km,       value: km || "—",    gold: false, op: r1Op },
+      { label: L.gearbox,  value: vitesT || "—", gold: false, op: r2Op },
+      { label: L.fuel,     value: yakitT || "—", gold: false, op: r3Op },
+      { label: L.body,     value: kasaT || "—",  gold: true,  op: r4Op },
     ];
 
     return (
@@ -1746,7 +2033,7 @@ function MediaSlide({
               paddingBottom: 18,
               borderBottom: ri < infoRows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
             }}>
-              <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.20em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 6 }}>
+              <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.20em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 6 }}>
                 {row.label}
               </div>
               <div style={{
@@ -1769,6 +2056,7 @@ function MediaSlide({
 
   // ─── editorial_right: Sağda fotoğraf kartı, solda büyük tipografi ─
   if (sceneVariant === "editorial_right" || sceneVariant === "editorial_left") {
+    const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
     const isRight = sceneVariant === "editorial_right";
     const photoOp = interpolate(localFrame, [0, 24], [0, 1], { extrapolateRight: "clamp" });
     const photoX  = interpolate(localFrame, [0, 24], [isRight ? 50 : -50, 0], { extrapolateRight: "clamp", easing: easeOut });
@@ -1815,30 +2103,282 @@ function MediaSlide({
           opacity: textOp, transform: `translateY(${textY}px)`,
         }}>
           <div style={{ width: lineW, height: 2.5, background: "#f8c96a", borderRadius: 2, marginBottom: 26, boxShadow: "0 0 14px rgba(248,201,106,0.52)" }} />
-          <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.30)", textTransform: "uppercase", marginBottom: 14 }}>
-            {cat ?? "Araç Detayı"}
+          <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 14 }}>
+            {cat ?? T.vehicleDetail}
           </div>
           <div style={{ fontFamily: "sans-serif", fontSize: 40, fontWeight: 800, color: "#ffffff", lineHeight: 1.05, letterSpacing: "-0.5px", marginBottom: 6 }}>
             {carBrand}
           </div>
-          <div style={{ fontFamily: "sans-serif", fontSize: 26, fontWeight: 400, color: "rgba(255,255,255,0.68)", lineHeight: 1.2, marginBottom: 22, letterSpacing: "0.2px" }}>
+          <div style={{ fontFamily: "sans-serif", fontSize: 26, fontWeight: 400, color: "rgba(255,255,255,0.82)", lineHeight: 1.2, marginBottom: 22, letterSpacing: "0.2px" }}>
             {carModel}
           </div>
           <div style={{ height: 1, background: "rgba(255,255,255,0.08)", marginBottom: 22 }} />
           {/* Performans detayları: Motor Gücü, Çekiş, Renk + Fiyat */}
           {[
-            { label: "MOTOR GÜCÜ", value: motorGucu || motor || "—",  gold: false },
-            { label: "ÇEKİŞ",      value: cekis  || "—",  gold: false },
-            { label: "RENK",       value: renk   || "—",  gold: false },
-            { label: "FİYAT",      value: price,           gold: true  },
+            { label: (T.labels.enginePower), value: motorGucu || motor || "—",  gold: false },
+            { label: (T.labels.drivetrain),  value: cekisT  || "—",  gold: false },
+            { label: (T.labels.color),       value: renkT   || "—",  gold: false },
+            { label: (T.labels.price),       value: price,           gold: true  },
           ].map((d, di) => {
             const dOp = interpolate(localFrame, [18 + di * 10, 38 + di * 10], [0, 1], { extrapolateRight: "clamp" });
             return (
               <div key={d.label} style={{ opacity: dOp, marginBottom: di < 3 ? 14 : 0 }}>
-                <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.28)", textTransform: "uppercase", marginBottom: 4 }}>{d.label}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 4 }}>{d.label}</div>
                 <div style={{ fontFamily: "sans-serif", fontSize: d.gold ? 28 : 18, fontWeight: d.gold ? 700 : 600, color: d.gold ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: d.gold ? "0.5px" : "0.1px", textShadow: d.gold ? "0 0 20px rgba(248,201,106,0.38)" : "none" }}>
                   {d.value}
                 </div>
+              </div>
+            );
+          })}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── price_reveal: Sağda foto kartı, solda büyük fiyat + araç bilgisi ────
+  if (sceneVariant === "price_reveal") {
+    const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
+    const photoOp  = interpolate(localFrame, [0, 24], [0, 1], { extrapolateRight: "clamp" });
+    const photoX   = interpolate(localFrame, [0, 24], [60, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const lineW    = interpolate(localFrame, [8, 28], [0, 60], { extrapolateRight: "clamp" });
+    const textOp   = interpolate(localFrame, [14, 36], [0, 1], { extrapolateRight: "clamp" });
+    const textY    = interpolate(localFrame, [14, 36], [20, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const priceOp  = interpolate(localFrame, [32, 52], [0, 1], { extrapolateRight: "clamp" });
+    const priceS   = interpolate(localFrame, [32, 52], [0.88, 1], { extrapolateRight: "clamp", easing: easeOut });
+
+    const detailRows = [
+      km          ? { label: T.labels.km,                 value: km          } : null,
+      motorGucu   ? { label: T.labels.enginePower,        value: motorGucu   } : null,
+      vitesT      ? { label: T.labels.gearbox,            value: vitesT      } : null,
+      yakitT      ? { label: T.labels.fuel,               value: yakitT      } : null,
+      kasaT       ? { label: T.labels.body,               value: kasaT       } : null,
+    ].filter(Boolean) as { label: string; value: string }[];
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#050508" }}>
+        {/* Arka plan subtle glow */}
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 24% 50%, rgba(10,28,60,0.75) 0%, transparent 58%)", pointerEvents: "none" }} />
+        <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 80% 50%, rgba(248,201,106,0.04) 0%, transparent 50%)", pointerEvents: "none" }} />
+
+        {/* Sol: içerik paneli */}
+        <div style={{
+          position: "absolute",
+          top: 0, bottom: 0, left: 0, right: "44%",
+          display: "flex", flexDirection: "column", justifyContent: "center",
+          padding: "0 64px 0 80px",
+        }}>
+          {/* Kategori etiketi */}
+          {cat && (
+            <div style={{ marginBottom: 20, opacity: textOp }}>
+              <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: "0.28em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+            </div>
+          )}
+
+          {/* Altın çizgi */}
+          <div style={{ width: lineW, height: 2.5, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.2))", borderRadius: 2, marginBottom: 24, boxShadow: "0 0 16px rgba(248,201,106,0.5)" }} />
+
+          {/* Marka + Model */}
+          <div style={{ opacity: textOp, transform: `translateY(${textY}px)`, marginBottom: 8 }}>
+            <div style={{ fontFamily: "sans-serif", fontSize: 46, fontWeight: 900, color: "#ffffff", letterSpacing: "-0.5px", lineHeight: 1 }}>{carBrand}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: 24, fontWeight: 300, color: "rgba(255,255,255,0.80)", letterSpacing: "0.5px", marginTop: 6, lineHeight: 1.2 }}>{carModel}</div>
+          </div>
+
+          {/* Araç detayları */}
+          {detailRows.length > 0 && (
+            <div style={{ marginTop: 28, marginBottom: 28, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+              {detailRows.map((row, ri) => {
+                const d = 24 + ri * 9;
+                const rOp = interpolate(localFrame, [d, d + 16], [0, 1], { extrapolateRight: "clamp" });
+                const rX  = interpolate(localFrame, [d, d + 16], [18, 0], { extrapolateRight: "clamp" });
+                return (
+                  <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, display: "flex", alignItems: "baseline", gap: 12 }}>
+                    <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", minWidth: 112, textShadow: LABEL_SHADOW }}>{row.label}</span>
+                    <span style={{ fontFamily: "sans-serif", fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>{row.value}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Fiyat — büyük ve gold */}
+          <div style={{ opacity: priceOp, transform: `scale(${priceS})`, transformOrigin: "left center", marginTop: detailRows.length > 0 ? 0 : 32 }}>
+            <div style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 10, textShadow: LABEL_SHADOW }}>{T.labels.price}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: 64, fontWeight: 900, color: "#f8c96a", letterSpacing: "-1px", lineHeight: 1, textShadow: "0 0 60px rgba(248,201,106,0.45), 0 4px 20px rgba(0,0,0,0.5)" }}>{price}</div>
+          </div>
+        </div>
+
+        {/* Sağ: foto kartı */}
+        <div style={{
+          position: "absolute",
+          top: 44, bottom: 44, right: 44,
+          width: "calc(44% - 8px)",
+          borderRadius: 20,
+          overflow: "hidden",
+          opacity: photoOp,
+          transform: `translateX(${photoX}px)`,
+          boxShadow: "0 32px 100px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.06)",
+          background: "#050508",
+        }}>
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(5,5,8,0.4) 0%, transparent 50%)", pointerEvents: "none" }} />
+          {/* Yıl rozeti */}
+          <div style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.60)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "6px 14px" }}>
+            <span style={{ fontFamily: "sans-serif", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.88)", letterSpacing: "0.08em" }}>{year}</span>
+          </div>
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── spotlight: Spot ışığı efekti — merkez parlak, kenarlar çok karanlık ──
+  if (sceneVariant === "spotlight") {
+    const spotOp   = interpolate(localFrame, [0, 18], [0, 1], { extrapolateRight: "clamp" });
+    const labelOp  = interpolate(localFrame, [20, 40], [0, 1], { extrapolateRight: "clamp" });
+    const labelY   = interpolate(localFrame, [20, 40], [16, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const brandOp  = interpolate(localFrame, [8, 26], [0, 0.07], { extrapolateRight: "clamp" });
+
+    return (
+      <AbsoluteFill style={{ opacity, overflow: "hidden", background: "#020204" }}>
+        {/* Tam ekran fotoğraf */}
+        <Img src={item.src} style={{ ...mediaStyle, objectFit: "contain" }} />
+
+        {/* Büyük marka adı — çok şeffaf watermark arka planda */}
+        <div style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          pointerEvents: "none",
+          opacity: brandOp,
+        }}>
+          <span style={{
+            fontFamily: "sans-serif",
+            fontSize: 260,
+            fontWeight: 900,
+            color: "#ffffff",
+            letterSpacing: "-8px",
+            textTransform: "uppercase",
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+          }}>{carBrand}</span>
+        </div>
+
+        {/* Spot ışığı vignette — merkez transparent, kenarlar çok koyu */}
+        <AbsoluteFill style={{
+          background: "radial-gradient(ellipse 52% 62% at 50% 48%, transparent 0%, rgba(2,2,4,0.30) 40%, rgba(2,2,4,0.72) 65%, rgba(2,2,4,0.93) 85%, rgba(2,2,4,0.98) 100%)",
+          pointerEvents: "none",
+          opacity: spotOp,
+        }} />
+
+        {/* Alt gradient */}
+        <AbsoluteFill style={{
+          background: "linear-gradient(to top, rgba(2,2,4,0.88) 0%, rgba(2,2,4,0.30) 25%, transparent 48%)",
+          pointerEvents: "none",
+        }} />
+
+        {/* Kategori etiketi — merkez alt */}
+        {cat && (
+          <div style={{
+            position: "absolute",
+            bottom: "18%",
+            left: "50%",
+            transform: `translate(-50%, 0) translateY(${labelY}px)`,
+            opacity: labelOp,
+            textAlign: "center",
+            pointerEvents: "none",
+          }}>
+            <div style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: "0.30em", color: "#f8c96a", textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
+            <div style={{ width: 40, height: 1.5, background: "rgba(248,201,106,0.5)", borderRadius: 1, margin: "0 auto" }} />
+          </div>
+        )}
+
+        {/* Köşe ışık sızıntısı — üst soldan */}
+        <AbsoluteFill style={{
+          background: "radial-gradient(ellipse 35% 28% at 8% 6%, rgba(248,201,106,0.09) 0%, transparent 100%)",
+          pointerEvents: "none",
+          mixBlendMode: "screen",
+        }} />
+      </AbsoluteFill>
+    );
+  }
+
+  // ─── stats_grid: Üstte foto kartı, altta 4 istatistik kutusu ────────────
+  if (sceneVariant === "stats_grid") {
+    const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
+    const photoOp  = interpolate(localFrame, [0, 22], [0, 1], { extrapolateRight: "clamp" });
+    const photoY   = interpolate(localFrame, [0, 22], [16, 0], { extrapolateRight: "clamp", easing: easeOut });
+    const lineW    = interpolate(localFrame, [16, 34], [0, 56], { extrapolateRight: "clamp" });
+
+    const statItems = [
+      { label: T.labels.km,          value: km         || "—", icon: "📍" },
+      { label: T.labels.enginePower, value: motorGucu  || motor || "—", icon: "⚡" },
+      { label: T.labels.gearbox,     value: vitesT     || "—", icon: "⚙" },
+      { label: T.labels.fuel,        value: yakitT     || "—", icon: "🛢" },
+    ];
+
+    return (
+      <AbsoluteFill style={{ opacity, background: "#04050a" }}>
+        <div style={{ position: "absolute", inset: 0, background: "linear-gradient(175deg, rgba(6,18,50,0.55) 0%, transparent 55%)", pointerEvents: "none" }} />
+
+        {/* ÜST: foto kartı — %47 yükseklik */}
+        <div style={{
+          position: "absolute",
+          top: 36, left: 40, right: 40,
+          height: "47%",
+          borderRadius: 20,
+          overflow: "hidden",
+          opacity: photoOp,
+          transform: `translateY(${photoY}px)`,
+          boxShadow: "0 28px 80px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.06)",
+          background: "#04050a",
+        }}>
+          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,5,10,0.50) 0%, transparent 45%)", pointerEvents: "none" }} />
+          {/* Kategori + marka overlay */}
+          <div style={{ position: "absolute", bottom: 16, left: 20, display: "flex", alignItems: "center", gap: 10 }}>
+            {cat && <div style={{ background: "rgba(0,0,0,0.60)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.30)", borderRadius: 8, padding: "4px 12px" }}>
+              <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+            </div>}
+            <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.70)", letterSpacing: "0.05em" }}>{carBrand} {carModel}</span>
+          </div>
+        </div>
+
+        {/* ORTA: başlık çizgisi + araç adı */}
+        <div style={{ position: "absolute", top: "49%", left: 40, right: 40, padding: "12px 4px 10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
+            <div style={{ width: lineW, height: 2, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.2))", borderRadius: 2, boxShadow: "0 0 10px rgba(248,201,106,0.4)" }} />
+            <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", whiteSpace: "nowrap" }}>{carBrand} · {year}</span>
+          </div>
+          <div style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.3px", lineHeight: 1 }}>{price}</div>
+        </div>
+
+        {/* ALT: 4 stat kutusu — 2x2 grid */}
+        <div style={{
+          position: "absolute",
+          bottom: 32, left: 40, right: 40,
+          height: "32%",
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gridTemplateRows: "1fr 1fr",
+          gap: 10,
+        }}>
+          {statItems.map((s, si) => {
+            const d = 22 + si * 12;
+            const sOp = interpolate(localFrame, [d, d + 20], [0, 1], { extrapolateRight: "clamp" });
+            const sY  = interpolate(localFrame, [d, d + 20], [14, 0], { extrapolateRight: "clamp", easing: easeOut });
+            return (
+              <div key={si} style={{
+                opacity: sOp,
+                transform: `translateY(${sY}px)`,
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 14,
+                padding: "14px 18px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                backdropFilter: "blur(12px)",
+              }}>
+                <div style={{ fontFamily: "sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: "0.20em", color: "rgba(255,255,255,0.60)", textTransform: "uppercase", marginBottom: 6 }}>{s.label}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 800, color: si === 1 ? "#f8c96a" : "rgba(255,255,255,0.95)", letterSpacing: "-0.2px", lineHeight: 1, textShadow: si === 1 ? "0 0 20px rgba(248,201,106,0.40)" : "none" }}>{s.value}</div>
               </div>
             );
           })}
@@ -1857,6 +2397,7 @@ function MediaSlide({
       "push_horizontal",
       "color_wash",
       "ken_zoom_slow",
+      "spotlight",
     ].includes(sceneVariant);
 
   return (
@@ -2120,7 +2661,7 @@ function KineticHud({
                   minWidth: c.gold ? 220 : 180,
                 }}
               >
-                <div style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: "0.18em", color: "rgba(255,255,255,0.45)", textTransform: "uppercase" }}>
+                <div style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: "0.18em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>
                   {c.k}
                 </div>
                 <div style={{ fontFamily: "sans-serif", fontSize: c.gold ? (portrait ? 22 : 20) : 16, fontWeight: c.gold ? 800 : 700, color: c.gold ? "#f8c96a" : "rgba(255,255,255,0.92)", letterSpacing: "0.3px", textShadow: c.gold ? "0 0 18px rgba(248,201,106,0.35)" : "none" }}>
@@ -2425,7 +2966,7 @@ function TextBlock({
           fontFamily: "sans-serif",
           fontWeight: 300,
           fontSize: isLandscape ? 30 : 38,
-          color: "rgba(255,255,255,0.72)",
+          color: "rgba(255,255,255,0.88)",
           letterSpacing: "3px",
           marginTop: 14,
           opacity: modelOpacity,
@@ -2454,7 +2995,7 @@ function TextBlock({
             fontFamily: "sans-serif",
             fontWeight: 300,
             fontSize: isLandscape ? 24 : 30,
-            color: "rgba(255,255,255,0.45)",
+            color: "rgba(255,255,255,0.68)",
             letterSpacing: "3px",
           }}
         >
@@ -2558,6 +3099,7 @@ function OutroFrame({
   price,
   galleryName,
   ctaPhone,
+  videoLanguage,
   outroStartFrame,
   layout,
 }: {
@@ -2566,6 +3108,7 @@ function OutroFrame({
   price: string;
   galleryName: string;
   ctaPhone?: string;
+  videoLanguage: VideoLanguage;
   outroStartFrame: number;
   layout: "portrait" | "landscape";
 }) {
@@ -2773,7 +3316,7 @@ function OutroFrame({
                 letterSpacing: "0.5px",
               }}
             >
-              {ctaPhone ?? "İletişime Geç"}
+              {ctaPhone ?? (VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr).contact}
             </span>
           </div>
         </div>
@@ -2792,6 +3335,9 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   price,
   galleryName,
   ctaPhone,
+  videoLanguage = "tr",
+  bgmSrc,
+  bgmVolume = 0.45,
   layout = "landscape",
   aspectRatio,
   outroFrames = OUTRO_FRAMES,
@@ -2826,6 +3372,26 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   const totalFrames = getTotalFrames(mediaItems, { outroFrames: safeOutroFrames, crossfadeFrames: preset.crossfadeFrames });
   const outroStartFrame = totalFrames - safeOutroFrames;
 
+  const bgmFade = (() => {
+    const fadeIn = interpolate(frame, [0, 18], [0, 1], { extrapolateRight: "clamp" });
+    const fadeOut = interpolate(frame, [Math.max(0, totalFrames - 24), totalFrames], [1, 0], { extrapolateLeft: "clamp" });
+    return Math.min(fadeIn, fadeOut);
+  })();
+
+  const voiceoverActive = (() => {
+    for (let i = 0; i < mediaItems.length; i++) {
+      const it = mediaItems[i];
+      if (!it.audioSrc) continue;
+      const from = getItemStartFrame(mediaItems, i, preset.crossfadeFrames);
+      const dur = getItemDuration(it);
+      if (frame >= from && frame < from + dur) return true;
+    }
+    return false;
+  })();
+
+  const bgmDuck = voiceoverActive ? 0.18 : 1;
+  const bgmVol = Math.max(0, Math.min(1, bgmVolume)) * bgmFade * bgmDuck;
+
   // Aktif sahnede hangi variant çalışıyor?
   let activeVariant = "full_bleed";
   for (let i = 0; i < mediaItems.length; i++) {
@@ -2845,12 +3411,14 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
     "duo_split", "trio_mosaic",
     // Kendi bilgilerini içeren layoutlar
     "framed_center", "editorial_right", "editorial_left", "listing_panel",
+    "price_reveal", "stats_grid",
   ]);
   const SUPPRESS_OVERLAYS = new Set([
     "card_panel", "letter_box", "feature_hero",
     "duo_split", "trio_mosaic",
     "split_specs", "side_table",
     "framed_center", "editorial_right", "editorial_left", "listing_panel",
+    "price_reveal", "stats_grid",
   ]);
 
   const hideTextBlock = SUPPRESS_TEXT.has(activeVariant);
@@ -2858,11 +3426,15 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
 
   return (
     <AbsoluteFill style={{ background: "#060608", overflow: "hidden" }}>
+      {/* Background music */}
+      {bgmSrc ? <Audio src={bgmSrc} volume={bgmVol} /> : null}
+
       {/* Medya katmanları */}
       {mediaItems.map((item, i) => (
         <MediaSlide
           key={i} item={item} index={i} items={mediaItems} preset={preset}
           carBrand={carBrand} carModel={carModel} year={year} price={price}
+          videoLanguage={videoLanguage}
           aspectRatio={aspectRatio}
           km={km} motor={motor} renk={renk} vites={vites} yakit={yakit} kasa={kasa}
           seri={seri} aracDurumu={aracDurumu} motorGucu={motorGucu} motorHacmi={motorHacmi}
@@ -2918,6 +3490,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
           price={price}
           galleryName={galleryName}
           ctaPhone={ctaPhone}
+          videoLanguage={videoLanguage}
           outroStartFrame={outroStartFrame}
           layout={effectiveLayout}
         />

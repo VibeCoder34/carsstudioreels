@@ -36,6 +36,7 @@ const DATA_VARIANTS = new Set([
   "card_panel", "letter_box", "feature_hero",
   "duo_split", "trio_mosaic",
   "framed_center", "listing_panel", "editorial_right", "editorial_left",
+  "price_reveal", "stats_grid",
 ]);
 const MIN_DATA_FRAMES = 150;  // 5 sn minimum
 const MAX_DATA_FRAMES = 360;  // 12 sn maximum

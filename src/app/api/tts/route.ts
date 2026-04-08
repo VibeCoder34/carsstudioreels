@@ -30,6 +30,12 @@ export async function GET() {
     languages: [
       { code: "tr" as const, label: "Türkçe" },
       { code: "en" as const, label: "English" },
+      { code: "es" as const, label: "Español" },
+      { code: "fr" as const, label: "Français" },
+      { code: "de" as const, label: "Deutsch" },
+      { code: "it" as const, label: "Italiano" },
+      { code: "ru" as const, label: "Русский" },
+      { code: "pt" as const, label: "Português" },
     ],
     defaultLanguage: cfg.defaultLanguage,
     envHints: {
@@ -37,12 +43,24 @@ export async function GET() {
       recommended: [
         "ELEVENLABS_VOICE_ID_TR",
         "ELEVENLABS_VOICE_ID_EN",
+        "ELEVENLABS_VOICE_ID_ES",
+        "ELEVENLABS_VOICE_ID_FR",
+        "ELEVENLABS_VOICE_ID_DE",
+        "ELEVENLABS_VOICE_ID_IT",
+        "ELEVENLABS_VOICE_ID_RU",
+        "ELEVENLABS_VOICE_ID_PT",
         "ELEVENLABS_MODEL_ID",
       ],
       optional: [
         "ELEVENLABS_VOICE_ID",
         "ELEVENLABS_MODEL_ID_TR",
         "ELEVENLABS_MODEL_ID_EN",
+        "ELEVENLABS_MODEL_ID_ES",
+        "ELEVENLABS_MODEL_ID_FR",
+        "ELEVENLABS_MODEL_ID_DE",
+        "ELEVENLABS_MODEL_ID_IT",
+        "ELEVENLABS_MODEL_ID_RU",
+        "ELEVENLABS_MODEL_ID_PT",
         "ELEVENLABS_OUTPUT_FORMAT",
         "ELEVENLABS_DEFAULT_LANGUAGE",
         "ELEVENLABS_BASE_URL",
@@ -64,7 +82,10 @@ export async function POST(req: NextRequest) {
         : cfg.defaultLanguage;
     } catch {
       return NextResponse.json(
-        { error: "Invalid language", details: 'Use "tr" or "en".' },
+        {
+          error: "Invalid language",
+          details: 'Use one of "tr", "en", "es", "fr", "de", "it", "ru", "pt".',
+        },
         { status: 400 }
       );
     }

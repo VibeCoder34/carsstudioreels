@@ -6,7 +6,9 @@ import { ELEVENLABS_PAID_PLAN_HINT } from "@/lib/elevenlabs";
 const FPS = 30;
 const MIN_FRAMES = 90;
 
-export type VoiceoverLanguage = "tr" | "en";
+import type { LanguageCode } from "@/lib/languages";
+
+export type VoiceoverLanguage = LanguageCode;
 
 export type AttachVoiceoverResult = {
   items: MediaItem[];

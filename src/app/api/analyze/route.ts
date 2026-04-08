@@ -11,12 +11,56 @@ interface PhotoInput {
   height?: number;
 }
 
-function voiceoverLanguagePreamble(language: "tr" | "en"): string {
+import { parseLanguageCode, type LanguageCode } from "@/lib/languages";
+
+function voiceoverLanguagePreamble(language: LanguageCode): string {
   if (language === "en") {
     return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
 The field "voiceover_text" on EVERY storyboard shot MUST be written in ENGLISH ONLY — full sentences, natural spoken English.
 TASK A still asks for "comment_tr" in Turkish: that is ONLY for on-screen notes. Do NOT copy Turkish from comment_tr into voiceover_text.
 If voiceover_text contains any Turkish words when English is required, the output is INVALID — rewrite voiceover_text in English.
+
+`;
+  }
+  if (language === "es") {
+    return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
+The field "voiceover_text" on EVERY storyboard shot MUST be written in SPANISH ONLY — natural spoken Spanish.
+Do NOT mix Turkish or English in voiceover_text.
+
+`;
+  }
+  if (language === "fr") {
+    return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
+The field "voiceover_text" on EVERY storyboard shot MUST be written in FRENCH ONLY — natural spoken French.
+Do NOT mix Turkish or English in voiceover_text.
+
+`;
+  }
+  if (language === "de") {
+    return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
+The field "voiceover_text" on EVERY storyboard shot MUST be written in GERMAN ONLY — natural spoken German.
+Do NOT mix Turkish or English in voiceover_text.
+
+`;
+  }
+  if (language === "it") {
+    return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
+The field "voiceover_text" on EVERY storyboard shot MUST be written in ITALIAN ONLY — natural spoken Italian.
+Do NOT mix Turkish or English in voiceover_text.
+
+`;
+  }
+  if (language === "ru") {
+    return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
+The field "voiceover_text" on EVERY storyboard shot MUST be written in RUSSIAN ONLY — natural spoken Russian.
+Do NOT mix Turkish or English in voiceover_text.
+
+`;
+  }
+  if (language === "pt") {
+    return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
+The field "voiceover_text" on EVERY storyboard shot MUST be written in PORTUGUESE ONLY — natural spoken Portuguese.
+Do NOT mix Turkish or English in voiceover_text.
 
 `;
   }
@@ -27,16 +71,29 @@ English category_label_en and comment_tr instructions elsewhere do NOT apply to 
 `;
 }
 
-function voiceoverPromptAppend(language: "tr" | "en"): string {
-  const langLabel = language === "en" ? "English" : "Turkish";
+function voiceoverPromptAppend(language: LanguageCode): string {
+  const langLabel =
+    language === "en" ? "English"
+    : language === "es" ? "Spanish"
+    : language === "fr" ? "French"
+    : language === "de" ? "German"
+    : language === "it" ? "Italian"
+    : language === "ru" ? "Russian"
+    : language === "pt" ? "Portuguese"
+    : "Turkish";
   const example =
-    language === "en"
-      ? "Low mileage, clean lines, ready to drive."
-      : "Düşük kilometre, temiz hatlar, hazır araç.";
+    language === "en" ? "Low mileage, clean lines, ready to drive."
+    : language === "es" ? "Bajo kilometraje, líneas limpias, listo para salir."
+    : language === "fr" ? "Faible kilométrage, lignes nettes, prêt à rouler."
+    : language === "de" ? "Wenig Kilometer, klare Linien, sofort startklar."
+    : language === "it" ? "Basso chilometraggio, linee pulite, pronta da guidare."
+    : language === "ru" ? "Небольшой пробег, чистые линии, готов к дороге."
+    : language === "pt" ? "Baixa quilometragem, linhas limpas, pronto para rodar."
+    : "Düşük kilometre, temiz hatlar, hazır araç.";
   const antiMix =
-    language === "en"
-      ? "- Do NOT use Turkish, German, or any non-English text in voiceover_text — even if the car listing data is Turkish."
-      : "- Türkçe dışında dil kullanma; İngilizce label'ları voiceover'a kopyalama.";
+    language === "tr"
+      ? "- Türkçe dışında dil kullanma; İngilizce label'ları voiceover'a kopyalama."
+      : `- Do NOT use Turkish or any non-${langLabel} text in voiceover_text — even if the car listing data is Turkish.`;
   return `
 
 TASK VOICEOVER — ${langLabel} narration for Text-to-Speech (ElevenLabs)
@@ -56,8 +113,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const aspectRatio: string = body.aspectRatio ?? "16:9";
+    const videoLanguage: LanguageCode = parseLanguageCode(body.videoLanguage, "tr");
+    const userNotes = String(body.userNotes ?? "").trim().slice(0, 800);
     const voiceoverEnabled = body.voiceover === true;
-    const voiceoverLanguage: "tr" | "en" = body.voiceoverLanguage === "en" ? "en" : "tr";
+    const voiceoverLanguage: LanguageCode = parseLanguageCode(body.voiceoverLanguage, "tr");
     const photos: PhotoInput[] = body.photos ?? body.frames?.map((f: { index: number; base64Frames?: string[] }) => ({
       index: f.index,
       base64: f.base64Frames?.[0] ?? "",
@@ -100,6 +159,7 @@ export async function POST(req: NextRequest) {
 
 INPUT: ${clean.length} car photos (JPEG, indexed 0-based).
 OUTPUT VIDEO FORMAT: ${aspectRatio}
+VIDEO LANGUAGE (for on-screen text): ${videoLanguage}
 PHOTO DIMENSIONS:
 ${photoDimLines}
 
@@ -132,8 +192,11 @@ WHAT EACH VARIANT DISPLAYS (each one shows a DIFFERENT slice of car data — var
 • "split_band"      → Profil görüntüsü + kategori bandı
 • "callout"         → Altın nokta + etiket balonu (DETAY)
 • "spec_table"      → Animasyonlu overlay tablo
+• "price_reveal"    → Sol: büyük altın fiyat + marka + KM/Güç/Vites detayları; Sağ: foto kartı (FİYAT VURGUSU)
+• "spotlight"       → Tam ekran spot ışığı: merkez parlak, kenarlar çok koyu, arka planda marka watermark (DRAMATİK GİRİŞ)
+• "stats_grid"      → Üstte foto kartı, altta 2×2 istatistik grid: KM / Motor Gücü / Vites / Yakıt
 
-TASK A — For EVERY photo, write a short critique in Turkish (comment_tr).
+TASK A — For EVERY photo, write a short critique in the VIDEO LANGUAGE above (store it in field "comment_tr" even if it's not Turkish).
 
 TASK B — Assign exactly ONE unique category_id per photo:
 1) Prefer fixed ids (use each max once): "${fixedList}"
@@ -164,15 +227,17 @@ TASK C — Portrait narrative arc (mobile-first, maximum variety):
   SHOT 4: "split_specs" (motor-focused). 150–210 frames.
   SHOT 5: "editorial_left" (brand identity alternate). 150–210 frames.
   SHOT 6: "spec_table" or "card_panel" (table). 210–300 frames.
-  SHOT 7 (optional): "duo_split" OR "trio_mosaic" (mid montage). 180–240 frames.
-  SECOND TO LAST: "split_specs" or "spec_table". 180–240 frames.
+  SHOT 7 (optional): "duo_split" OR "trio_mosaic" OR "stats_grid" (mid montage). 180–240 frames.
+  SECOND TO LAST: "split_specs" or "spec_table" or "price_reveal". 180–240 frames.
   LAST: "feature_hero" (performance climax). 210–300 frames.
   For ${clean.length} < 7 photos, skip slots in order but keep the same principle.
 
 TASK D — Duration per shot (portrait):
   - Readable layouts: 150–240 frames
-  - Dense tables: 210–330 frames
+  - Dense tables ("card_panel", "spec_table", "stats_grid"): 210–330 frames
   - Detail callout: 90–150 frames
+  - "spotlight": 90–150 frames
+  - "price_reveal": 180–240 frames
   Min 90 frames, max 360 frames.
 
 TASK E — scene_variant rules summary:
@@ -181,6 +246,9 @@ TASK E — scene_variant rules summary:
   • "duo_split" → use max 1 time; pick complementary photos
   • "trio_mosaic" → use max 1 time; mid-video only
   • "feature_hero" → use exactly 1 time (last shot ideally)
+  • "spotlight" → use max 1 time; dramatic opener (full-body or hero angle)
+  • "price_reveal" → use max 1 time; near end for price impact
+  • "stats_grid" → use max 1 time; mid-video for KM/power stats
   • Everything else → spread freely, no consecutive duplicates
 
 Also set quality_score (1–10), lighting: "excellent"|"good"|"average"|"poor".
@@ -197,7 +265,7 @@ OUTPUT — ONLY valid JSON, no markdown:
     "duration_frames": 180,
     "scene_variant": "framed_center"
   }],
-  "editing_notes_tr": "Kısa Türkçe genel kurgu notu",
+  "editing_notes_tr": "Short overall editing note in the VIDEO LANGUAGE above",
   "outro_frames": 90
 }
 
@@ -217,8 +285,8 @@ TASK C — Narrative arc with MAXIMUM VARIETY:
   SHOT 6: "letter_box" (cinematic wide). 180–240 frames.
   SHOT 7: "duo_split" (pair comparison). 180–240 frames.
   SHOT 8: "trio_mosaic" (montage). 180–240 frames.
-  SHOT 9+: Rotate freely through all remaining variants, no consecutive repeats.
-  SECOND TO LAST: "spec_table" or "split_specs". 180–240 frames.
+  SHOT 9+: Rotate freely through all remaining variants including "price_reveal", "spotlight", "stats_grid", no consecutive repeats.
+  SECOND TO LAST: "spec_table" or "split_specs" or "stats_grid". 180–240 frames.
   LAST: "feature_hero" (performance climax). 210–300 frames.
   For ${clean.length} < 9 photos, skip slots in order but keep the same principle.
 
@@ -229,6 +297,9 @@ TASK D — Duration per shot:
   "duo_split", "trio_mosaic": 180–270 frames  (~6–9 sn)
   "split_specs", "split_band": 120–180 frames  (~4–6 sn)
   "spec_table", "floating_card": 150–210 frames
+  "price_reveal": 180–240 frames  (~6–8 sn)
+  "spotlight": 90–150 frames  (~3–5 sn, dramatic opener)
+  "stats_grid": 180–270 frames  (~6–9 sn)
   "callout": 90–120 frames
   Min 90 frames (3 sn), max 360 frames (12 sn).
 
@@ -238,6 +309,9 @@ TASK E — scene_variant assignment rules summary:
   • "duo_split" → use exactly 1 time; pick adjacent or complementary photos
   • "trio_mosaic" → use exactly 1 time (mid-video)
   • "feature_hero" → use exactly 1 time (last shot ideally)
+  • "spotlight" → use max 1 time; ideal for dramatic first or second shot (full-body or hero angle)
+  • "price_reveal" → use max 1 time; place near end for maximum impact
+  • "stats_grid" → use max 1 time; ideal mid-video for KM/power stats
   • Everything else → spread freely, no consecutive duplicates
 
 Also set quality_score (1–10), lighting: "excellent"|"good"|"average"|"poor".
@@ -254,7 +328,7 @@ OUTPUT — ONLY valid JSON, no markdown:
     "duration_frames": 180,
     "scene_variant": "framed_center"
   }],
-  "editing_notes_tr": "Kısa Türkçe genel kurgu notu",
+  "editing_notes_tr": "Short overall editing note in the VIDEO LANGUAGE above",
   "outro_frames": 90
 }
 
@@ -264,9 +338,13 @@ NO full_bleed · NO push_horizontal · NO color_wash.
 NO variant repeated > ${maxRepeat} times · NO two consecutive same variant.`;
 
     let promptText = isPortraitFormat ? portraitPrompt : landscapePrompt;
+    if (userNotes) {
+      promptText += `\n\n━━ USER NOTES (HIGH PRIORITY) ━━\n${userNotes}\n`;
+    }
     if (voiceoverEnabled) {
       promptText = voiceoverLanguagePreamble(voiceoverLanguage) + promptText;
       promptText += voiceoverPromptAppend(voiceoverLanguage);
+      promptText += `\n\nCTA RULE: The LAST storyboard shot's voiceover_text must end with a short call-to-action in the same language (e.g. contact us / DM / call). Keep it one short sentence.`;
     }
 
     contentBlocks.push({ type: "text", text: promptText });

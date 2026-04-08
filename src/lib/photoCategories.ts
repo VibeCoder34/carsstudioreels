@@ -62,6 +62,12 @@ export const SCENE_VARIANTS = [
   "editorial_left",
   /** Sol küçük fotoğraf kartı (%42), sağda 4 satır bilgi tablosu */
   "listing_panel",
+  /** Sağda foto kartı, solda büyük fiyat + araç bilgisi (dramatic price reveal) */
+  "price_reveal",
+  /** Tam ekran spot ışığı efekti — merkez parlak, kenarlar karanlık, HUD aktif */
+  "spotlight",
+  /** Üstte foto kartı, altta 4 istatistik kutusu (KM, güç, vites, yakıt) */
+  "stats_grid",
 ] as const;
 
 export type SceneVariant = (typeof SCENE_VARIANTS)[number];
