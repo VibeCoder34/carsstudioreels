@@ -153,8 +153,7 @@ export async function POST(req: NextRequest) {
 
     const maxRepeat = Math.max(2, Math.ceil(clean.length / 5));
 
-    const isPortraitFormat = aspectRatio === "9:16" || aspectRatio === "3:4";
-
+    // ── Shared header ────────────────────────────────────────────────────────
     const baseHeader = `You are a premium automotive video storyboard director.
 
 INPUT: ${clean.length} car photos (JPEG, indexed 0-based).
@@ -164,20 +163,18 @@ PHOTO DIMENSIONS:
 ${photoDimLines}
 
 ━━━ NON-NEGOTIABLE RULES ━━━
-1. Every shot: photo occupies ≤ 55% of screen. The rest = typography + data.
-2. "full_bleed", "push_horizontal", "color_wash" are FORBIDDEN.
-3. Photos are NEVER cropped — always displayed with objectFit:contain on a dark background.
-4. VARIETY IS MANDATORY: No scene_variant may appear more than ${maxRepeat} times total.
-   "framed_center" and "listing_panel" may each appear at most ${maxRepeat} times — not more.
-5. NO two consecutive shots may use the same scene_variant.
-6. Use PHOTO DIMENSIONS to choose the best layout:
-   - Photo AR ≈ output AR → "framed_center" or "letter_box"
-   - Photo landscape, output portrait → "listing_panel" or "editorial_right"
-   - Photo portrait, output landscape → "framed_center" or "card_panel"
-   - Photo square → any layout, avoid repeating the same as prior shot
+1. "full_bleed", "push_horizontal", "color_wash" are FORBIDDEN.
+2. Photos are NEVER cropped — always displayed with objectFit:contain on a dark background.
+3. VARIETY IS MANDATORY: No scene_variant may appear more than ${maxRepeat} times total.
+4. NO two consecutive shots may use the same scene_variant.
+5. READABILITY: one clear message per shot; avoid dense tables in the first 2 shots; prefer large, short labels.
+6. PHOTO-AWARE choices:
+   - If the photo is a close-up detail (badge/headlight/wheel/interior button) → prefer "callout".
+   - If the photo is a clean side profile → "split_band" is allowed (otherwise avoid it).
+   - If the photo is a full-body hero angle → "spotlight" (if allowed by format) makes a strong hook.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-WHAT EACH VARIANT DISPLAYS (each one shows a DIFFERENT slice of car data — variety is mandatory):
+WHAT EACH VARIANT DISPLAYS:
 • "framed_center"   → Marka + Seri + Model + Yıl + Araç Durumu + Fiyat + Motor·KM·Kasa özeti
 • "listing_panel"   → KM + Vites + Yakıt + Kasa (pratik kullanım bilgileri)
 • "editorial_right" / "editorial_left" → Marka büyük + Motor Gücü + Çekiş + Renk + Fiyat
@@ -196,61 +193,14 @@ WHAT EACH VARIANT DISPLAYS (each one shows a DIFFERENT slice of car data — var
 • "spotlight"       → Tam ekran spot ışığı: merkez parlak, kenarlar çok koyu, arka planda marka watermark (DRAMATİK GİRİŞ)
 • "stats_grid"      → Üstte foto kartı, altta 2×2 istatistik grid: KM / Motor Gücü / Vites / Yakıt
 
-TASK A — For EVERY photo, write a short critique in the VIDEO LANGUAGE above (store it in field "comment_tr" even if it's not Turkish).
-
+TASK A — For EVERY photo, write a short critique in the VIDEO LANGUAGE above (store it in field "comment_tr").
 TASK B — Assign exactly ONE unique category_id per photo:
 1) Prefer fixed ids (use each max once): "${fixedList}"
 2) Otherwise invent a specific English snake_case id.
 3) category_label_en: short English label for display.
 `;
 
-    const portraitPrompt = `${baseHeader}
-
-━━━ PORTRAIT-FIRST (MOBILE) DIRECTIVE ━━━
-You are producing a premium vertical social video (TikTok/Reels/Shorts).
-The edit must feel designed for mobile: big typography, quick comprehension, and strong hook.
-
-PORTRAIT RULES:
-1) Prefer layouts that look intentional on vertical screens:
-   Priority: "listing_panel", "editorial_right", "editorial_left", "framed_center", "floating_card", "callout", "split_specs", "spec_table".
-2) "letter_box" is allowed but must be used at most once and only if the photo is a true landscape hero shot.
-3) Use "split_band" only for clean profile/side shots (if present).
-4) Avoid multi-image grids unless you have enough distinct angles:
-   - "duo_split" use at most once.
-   - "trio_mosaic" use at most once and only mid-video.
-5) The first 2 shots MUST be highly readable: no dense tables, no tiny labels.
-
-TASK C — Portrait narrative arc (mobile-first, maximum variety):
-  SHOT 1: Hook. "editorial_right" or "framed_center". 150–210 frames.
-  SHOT 2: "listing_panel" (KM/Vites/Yakıt/Kasa). 150–210 frames.
-  SHOT 3: "callout" (detail) OR "floating_card" (meta). 120–180 frames.
-  SHOT 4: "split_specs" (motor-focused). 150–210 frames.
-  SHOT 5: "editorial_left" (brand identity alternate). 150–210 frames.
-  SHOT 6: "spec_table" or "card_panel" (table). 210–300 frames.
-  SHOT 7 (optional): "duo_split" OR "trio_mosaic" OR "stats_grid" (mid montage). 180–240 frames.
-  SECOND TO LAST: "split_specs" or "spec_table" or "price_reveal". 180–240 frames.
-  LAST: "feature_hero" (performance climax). 210–300 frames.
-  For ${clean.length} < 7 photos, skip slots in order but keep the same principle.
-
-TASK D — Duration per shot (portrait):
-  - Readable layouts: 150–240 frames
-  - Dense tables ("card_panel", "spec_table", "stats_grid"): 210–330 frames
-  - Detail callout: 90–150 frames
-  - "spotlight": 90–150 frames
-  - "price_reveal": 180–240 frames
-  Min 90 frames, max 360 frames.
-
-TASK E — scene_variant rules summary:
-  • "callout" → only for close-up details (badge, headlight, wheel center cap)
-  • "split_band" → only for clean profile/side shots
-  • "duo_split" → use max 1 time; pick complementary photos
-  • "trio_mosaic" → use max 1 time; mid-video only
-  • "feature_hero" → use exactly 1 time (last shot ideally)
-  • "spotlight" → use max 1 time; dramatic opener (full-body or hero angle)
-  • "price_reveal" → use max 1 time; near end for price impact
-  • "stats_grid" → use max 1 time; mid-video for KM/power stats
-  • Everything else → spread freely, no consecutive duplicates
-
+    const jsonOutputBlock = `
 Also set quality_score (1–10), lighting: "excellent"|"good"|"average"|"poor".
 
 OUTPUT — ONLY valid JSON, no markdown:
@@ -259,7 +209,7 @@ OUTPUT — ONLY valid JSON, no markdown:
     "source_index": 0,
     "category_id": "front",
     "category_label_en": "Front",
-    "comment_tr": "Türkçe yorum",
+    "comment_tr": "short critique in video language",
     "quality_score": 8,
     "lighting": "good",
     "duration_frames": 180,
@@ -270,74 +220,282 @@ OUTPUT — ONLY valid JSON, no markdown:
 }
 
 MUST: exactly ${clean.length} entries, each source_index once.
-Target ~${clean.length * 180} frames total (~${Math.round(clean.length * 6)} sn).
 NO full_bleed · NO push_horizontal · NO color_wash.
 NO variant repeated > ${maxRepeat} times · NO two consecutive same variant.`;
 
-    const landscapePrompt = `${baseHeader}
+    // ── 9:16 — TikTok / Instagram Reels / YouTube Shorts ────────────────────
+    // Must be VERTICAL-NATIVE (not “landscape video rotated into portrait”).
+    // Push the design towards large typography, fewer elements, and fast comprehension.
+    const vertical916Prompt = `${baseHeader}
 
-TASK C — Narrative arc with MAXIMUM VARIETY:
-  SHOT 1: Hook. "framed_center". 150–180 frames.
-  SHOT 2: "listing_panel" (shows KM/Motor/Renk/Vites — completely different data). 150–180 frames.
-  SHOT 3: "editorial_right" or "editorial_left" (brand identity). 150–200 frames.
-  SHOT 4: "card_panel" or "side_table" (spec table). 180–240 frames.
-  SHOT 5: "split_specs" or "split_band". 150–200 frames.
-  SHOT 6: "letter_box" (cinematic wide). 180–240 frames.
-  SHOT 7: "duo_split" (pair comparison). 180–240 frames.
-  SHOT 8: "trio_mosaic" (montage). 180–240 frames.
-  SHOT 9+: Rotate freely through all remaining variants including "price_reveal", "spotlight", "stats_grid", no consecutive repeats.
-  SECOND TO LAST: "spec_table" or "split_specs" or "stats_grid". 180–240 frames.
-  LAST: "feature_hero" (performance climax). 210–300 frames.
-  For ${clean.length} < 9 photos, skip slots in order but keep the same principle.
+━━━ FORMAT: 9:16 — MOBILE VERTICAL (TikTok / Reels / Shorts) ━━━
+You are cutting a premium automotive social reel for phone screens.
+Design principle: ONE clear message per shot. Big typography. Low cognitive load.
+A viewer scrolling fast must understand the shot in ≤ 0.5 seconds.
 
-TASK D — Duration per shot:
-  "framed_center", "listing_panel": 150–210 frames  (~5–7 sn)
-  "editorial_right", "editorial_left": 150–210 frames  (~5–7 sn)
-  "card_panel", "side_table", "letter_box", "feature_hero": 210–300 frames  (~7–10 sn)
-  "duo_split", "trio_mosaic": 180–270 frames  (~6–9 sn)
-  "split_specs", "split_band": 120–180 frames  (~4–6 sn)
-  "spec_table", "floating_card": 150–210 frames
-  "price_reveal": 180–240 frames  (~6–8 sn)
-  "spotlight": 90–150 frames  (~3–5 sn, dramatic opener)
-  "stats_grid": 180–270 frames  (~6–9 sn)
-  "callout": 90–120 frames
-  Min 90 frames (3 sn), max 360 frames (12 sn).
+CRITICAL: Do NOT “adapt” a 16:9 storyboard into 9:16. This must feel designed for vertical.
 
-TASK E — scene_variant assignment rules summary:
-  • "callout" → only for close-up details (badge, headlight, wheel center cap)
-  • "split_band" → only for clean profile/side shots
-  • "duo_split" → use exactly 1 time; pick adjacent or complementary photos
-  • "trio_mosaic" → use exactly 1 time (mid-video)
-  • "feature_hero" → use exactly 1 time (last shot ideally)
-  • "spotlight" → use max 1 time; ideal for dramatic first or second shot (full-body or hero angle)
-  • "price_reveal" → use max 1 time; place near end for maximum impact
-  • "stats_grid" → use max 1 time; ideal mid-video for KM/power stats
-  • Everything else → spread freely, no consecutive duplicates
+VERTICAL-SPECIFIC LAYOUT RULES:
+• Use a VERTICAL mix dominated by: "spotlight", "stats_grid", "listing_panel", "price_reveal", "callout".
+• ALLOWED (9:16-optimised): "spotlight", "stats_grid", "listing_panel", "price_reveal",
+  "callout", "floating_card", "split_specs", "framed_center", "editorial_right", "editorial_left",
+  "spec_table", "card_panel", "feature_hero", "split_band".
+• FORBIDDEN (tiny/awkward on 9:16): "letter_box", "duo_split", "trio_mosaic".
+• "split_band" only if there is a clean side-profile photo.
+• "callout" only for macro / close-up detail shots (badge, wheel, headlight).
+• First 2 shots MUST be the most readable of the entire video (no dense tables).
+• Avoid "spec_table" and "card_panel" until after shot 4 (they read small on phones).
+• Alternate visual intensity: BOLD hook ↔ simple data ↔ detail ↔ sales impact.
 
-Also set quality_score (1–10), lighting: "excellent"|"good"|"average"|"poor".
+TASK C — 9:16 Narrative arc (MUST follow this structure):
+  SHOT 1  : HOOK — "spotlight" (preferred) OR "framed_center". 105–150 frames.
+  SHOT 2  : DATA — "stats_grid". 135–180 frames.
+  SHOT 3  : SALES — "price_reveal" OR "listing_panel" (keep it simple). 135–180 frames.
+  SHOT 4  : DETAIL — "callout" (only if macro/detail photo exists) OR "floating_card". 90–135 frames.
+  SHOT 5  : BRAND — "editorial_right" OR "editorial_left". 135–180 frames.
+  SHOT 6  : SPECS — "split_specs" (engine-focused). 120–165 frames.
+  LAST    : CLIMAX — "feature_hero". 150–210 frames.
+  If there are more photos than slots, insert between SHOT 5–6 using ONLY: "listing_panel", "floating_card", "split_specs", "callout" (if detail), "stats_grid" (max once total).
 
-OUTPUT — ONLY valid JSON, no markdown:
-{
-  "storyboard": [{
-    "source_index": 0,
-    "category_id": "front",
-    "category_label_en": "Front",
-    "comment_tr": "Türkçe yorum",
-    "quality_score": 8,
-    "lighting": "good",
-    "duration_frames": 180,
-    "scene_variant": "framed_center"
-  }],
-  "editing_notes_tr": "Short overall editing note in the VIDEO LANGUAGE above",
-  "outro_frames": 90
-}
+TASK D — Duration per shot (9:16):
+  "spotlight"                  : 90–135 frames
+  "framed_center"              : 105–150 frames
+  "stats_grid"                 : 135–180 frames
+  "callout"                    : 90–120 frames
+  "floating_card"              : 105–150 frames
+  "listing_panel"              : 120–165 frames
+  "editorial_right/left"       : 120–165 frames
+  "split_specs"                : 120–165 frames
+  "price_reveal"               : 135–180 frames
+  "feature_hero"               : 150–210 frames
+  Min 90 frames · Max 300 frames.
 
-MUST: exactly ${clean.length} entries, each source_index once.
+TASK E — Strict usage limits:
+  • "spotlight"    → max 1 time (opener)
+  • "callout"      → max 2 times (detail photos only)
+  • "price_reveal" → exactly 1 time
+  • "feature_hero" → exactly 1 time (last shot)
+  • "stats_grid"   → max 1 time (shot 2 ideally)
+  • "split_band"   → max 1 time (side-profile only)
+  • All others     → spread freely, no two consecutive same variant
+  • FORBIDDEN: "letter_box", "duo_split", "trio_mosaic"
+
+Target ~${clean.length * 150} frames total (~${Math.round(clean.length * 5)} sn).
+${jsonOutputBlock}`;
+
+    // ── 3:4 — Vertical+ (editorial portrait) ────────────────────────────────
+    // Still portrait-native but less extreme than 9:16.
+    // Keep an editorial/luxury rhythm; still avoid “landscape storyboard in portrait”.
+    const vertical34Prompt = `${baseHeader}
+
+━━━ FORMAT: 3:4 — VERTICAL+ (Editorial Portrait) ━━━
+You are cutting a premium automotive editorial video for Instagram portrait or print-style display.
+Design principle: editorial luxury feel — clean layout, measured pace, typographic confidence.
+Slightly slower than 9:16; allow data panels to breathe.
+
+VERTICAL+ LAYOUT RULES:
+• ALLOWED: all variants EXCEPT "letter_box" (bars waste vertical space) and "trio_mosaic" (images too small).
+• "duo_split" is allowed max 1 time (columns fit better at 3:4 than 9:16).
+• "split_band" only for a clean side-profile shot.
+• "callout" only for close-up detail shots.
+• First 2 shots: prioritise readability — large text, strong brand statement.
+
+TASK C — 3:4 Narrative arc:
+  SHOT 1  : HOOK — "spotlight" OR "framed_center". 135–195 frames.
+  SHOT 2  : DATA — "stats_grid" OR "listing_panel". 150–210 frames.
+  SHOT 3  : SALES — "price_reveal" (preferred) OR "editorial_right/left". 150–210 frames.
+  SHOT 4  : DETAIL — "callout" OR "floating_card". 90–150 frames.
+  SHOT 5  : SPECS — "split_specs" OR "card_panel". 150–210 frames.
+  SHOT 6  : TABLE — "spec_table" OR "side_table". 180–270 frames.
+  SHOT 7  : MONTAGE — "duo_split" (max once) OR "stats_grid" (only if not used yet). 180–240 frames.
+  LAST    : CLIMAX — "feature_hero". 180–270 frames.
+  For ${clean.length} < 9 photos: skip slots from middle, keep hook + price + climax.
+  For ${clean.length} > 9 photos: add "editorial_left", "split_specs", "floating_card" between slots.
+
+TASK D — Duration per shot (3:4):
+  "spotlight", "callout"                : 90–150 frames
+  "framed_center", "listing_panel"      : 150–210 frames
+  "editorial_right/left"                : 150–210 frames
+  "stats_grid", "split_specs"           : 150–210 frames
+  "spec_table", "card_panel", "side_table" : 180–270 frames
+  "duo_split"                           : 180–240 frames
+  "floating_card"                       : 120–180 frames
+  "price_reveal"                        : 150–210 frames
+  "feature_hero"                        : 180–270 frames
+  Min 90 frames · Max 300 frames.
+
+TASK E — Strict usage limits:
+  • "spotlight"    → max 1 time
+  • "duo_split"    → max 1 time
+  • "price_reveal" → exactly 1 time (near end)
+  • "feature_hero" → exactly 1 time (last)
+  • "stats_grid"   → max 1 time
+  • "callout"      → max 2 times (detail photos only)
+  • FORBIDDEN: "letter_box", "trio_mosaic"
+
 Target ~${clean.length * 180} frames total (~${Math.round(clean.length * 6)} sn).
-NO full_bleed · NO push_horizontal · NO color_wash.
-NO variant repeated > ${maxRepeat} times · NO two consecutive same variant.`;
+${jsonOutputBlock}`;
 
-    let promptText = isPortraitFormat ? portraitPrompt : landscapePrompt;
+    // ── 16:9 — Widescreen landscape ─────────────────────────────────────────
+    const landscape169Prompt = `${baseHeader}
+
+━━━ FORMAT: 16:9 — WIDESCREEN LANDSCAPE (YouTube / Web) ━━━
+You are cutting a premium automotive video for widescreen display.
+Design principle: cinematic flow — use the full horizontal canvas, let data panels
+breathe, build to a dramatic climax. Every layout exploits the wide aspect ratio.
+
+TASK C — 16:9 Narrative arc with MAXIMUM VARIETY:
+  SHOT 1  : HOOK — "framed_center". 150–180 frames.
+  SHOT 2  : DATA — "listing_panel" (KM/Motor/Renk/Vites). 150–180 frames.
+  SHOT 3  : BRAND — "editorial_right" OR "editorial_left". 150–200 frames.
+  SHOT 4  : TABLE — "card_panel" OR "side_table". 180–240 frames.
+  SHOT 5  : SPECS — "split_specs" OR "split_band". 150–200 frames.
+  SHOT 6  : CINEMATIC — "letter_box" (wide hero shot). 180–240 frames.
+  SHOT 7  : COMPARE — "duo_split". 180–240 frames.
+  SHOT 8  : MONTAGE — "trio_mosaic". 180–240 frames.
+  SHOT 9+ : Rotate freely: "price_reveal", "spotlight", "stats_grid", "floating_card", "callout". No consecutive repeats.
+  SECOND TO LAST: "spec_table" OR "split_specs" OR "stats_grid". 180–240 frames.
+  LAST    : CLIMAX — "feature_hero". 210–300 frames.
+  For ${clean.length} < 9 photos: skip slots in order; always keep SHOT 1 + LAST.
+
+TASK D — Duration per shot (16:9):
+  "framed_center", "listing_panel"          : 150–210 frames
+  "editorial_right", "editorial_left"        : 150–210 frames
+  "card_panel", "side_table", "letter_box", "feature_hero" : 210–300 frames
+  "duo_split", "trio_mosaic"                 : 180–270 frames
+  "split_specs", "split_band"                : 120–180 frames
+  "spec_table", "floating_card"              : 150–210 frames
+  "price_reveal"                             : 180–240 frames
+  "spotlight"                                : 90–150 frames
+  "stats_grid"                               : 180–270 frames
+  "callout"                                  : 90–120 frames
+  Min 90 frames · Max 360 frames.
+
+TASK E — Strict usage limits:
+  • "callout"      → only for close-up detail photos
+  • "split_band"   → only for clean side-profile shots
+  • "duo_split"    → exactly 1 time
+  • "trio_mosaic"  → exactly 1 time (mid-video)
+  • "feature_hero" → exactly 1 time (last shot)
+  • "spotlight"    → max 1 time (dramatic opener or second shot)
+  • "price_reveal" → max 1 time (near end)
+  • "stats_grid"   → max 1 time (mid-video)
+
+Target ~${clean.length * 180} frames total (~${Math.round(clean.length * 6)} sn).
+${jsonOutputBlock}`;
+
+    // ── 4:3 — Classic TV / web ───────────────────────────────────────────────
+    const classic43Prompt = `${baseHeader}
+
+━━━ FORMAT: 4:3 — CLASSIC (TV / Facebook / Web) ━━━
+You are cutting a premium automotive video for classic 4:3 display (slightly wider than square).
+Design principle: clear, structured, TV-broadcast quality — each shot communicates one data story cleanly.
+The format is forgiving for both landscape and portrait photos.
+
+TASK C — 4:3 Narrative arc:
+  SHOT 1  : HOOK — "framed_center". 150–180 frames.
+  SHOT 2  : DATA — "listing_panel". 150–180 frames.
+  SHOT 3  : BRAND — "editorial_right" OR "editorial_left". 150–200 frames.
+  SHOT 4  : SPECS — "split_specs" OR "stats_grid". 150–210 frames.
+  SHOT 5  : TABLE — "card_panel" OR "spec_table". 180–240 frames.
+  SHOT 6  : DETAIL — "callout" OR "floating_card". 90–150 frames.
+  SHOT 7  : CINEMATIC — "letter_box" (max 1 time; only for a true wide landscape hero shot). 150–210 frames.
+  SHOT 8  : MONTAGE — "duo_split" OR "trio_mosaic". 180–240 frames.
+  SHOT 9+ : "price_reveal", "spotlight", "side_table", "split_band". No consecutive repeats.
+  LAST    : CLIMAX — "feature_hero". 210–300 frames.
+  For ${clean.length} < 8 photos: skip middle slots; always keep SHOT 1 + LAST.
+
+TASK D — Duration per shot (4:3):
+  "framed_center", "listing_panel"         : 150–210 frames
+  "editorial_right", "editorial_left"       : 150–210 frames
+  "split_specs", "split_band"               : 120–180 frames
+  "card_panel", "spec_table", "side_table" : 180–270 frames
+  "stats_grid", "duo_split", "trio_mosaic"  : 180–240 frames
+  "letter_box"                              : 150–210 frames
+  "floating_card", "callout"               : 90–150 frames
+  "price_reveal"                            : 180–240 frames
+  "spotlight"                               : 90–150 frames
+  "feature_hero"                            : 210–300 frames
+  Min 90 frames · Max 300 frames.
+
+TASK E — Strict usage limits:
+  • "letter_box"   → max 1 time (wide landscape photos only)
+  • "duo_split"    → max 1 time
+  • "trio_mosaic"  → max 1 time (mid-video)
+  • "feature_hero" → exactly 1 time (last shot)
+  • "spotlight"    → max 1 time
+  • "price_reveal" → max 1 time (near end)
+  • "stats_grid"   → max 1 time
+  • "callout"      → close-up detail photos only
+
+Target ~${clean.length * 180} frames total (~${Math.round(clean.length * 6)} sn).
+${jsonOutputBlock}`;
+
+    // ── 1:1 — Square (Instagram) ─────────────────────────────────────────────
+    const square11Prompt = `${baseHeader}
+
+━━━ FORMAT: 1:1 — SQUARE (Instagram / LinkedIn) ━━━
+You are cutting a premium automotive video for square display.
+Design principle: perfectly balanced — symmetric layouts, strong centred compositions,
+works for both landscape and portrait source photos. Clean and scroll-stopping.
+
+SQUARE LAYOUT RULES:
+• Layouts that shine on square: "framed_center", "stats_grid", "callout", "floating_card",
+  "editorial_right", "editorial_left", "spec_table", "price_reveal", "feature_hero",
+  "spotlight", "listing_panel", "split_specs", "card_panel".
+• "letter_box" is FORBIDDEN (adds bars that waste space on square).
+• "duo_split" is OK once (side-by-side works at 1:1).
+• "trio_mosaic" use max 1 time and only mid-video (images will be small).
+• "split_band" only for a clean side-profile shot.
+• Prefer centred, balanced compositions over asymmetric editorial layouts.
+
+TASK C — 1:1 Narrative arc:
+  SHOT 1  : HOOK — "spotlight" OR "framed_center". 120–180 frames.
+  SHOT 2  : DATA — "stats_grid". 150–210 frames.
+  SHOT 3  : BRAND — "editorial_right" OR "editorial_left". 150–210 frames.
+  SHOT 4  : DETAIL — "callout" OR "floating_card". 90–150 frames.
+  SHOT 5  : SPECS — "listing_panel" OR "split_specs". 150–180 frames.
+  SHOT 6  : TABLE — "spec_table" OR "card_panel". 180–240 frames.
+  SHOT 7  : MONTAGE — "duo_split" OR "trio_mosaic". 180–240 frames.
+  SHOT 8  : PRICE — "price_reveal". 150–210 frames.
+  LAST    : CLIMAX — "feature_hero". 180–270 frames.
+  For ${clean.length} < 9 photos: skip middle slots; keep hook + price + climax.
+
+TASK D — Duration per shot (1:1):
+  "spotlight"                           : 90–150 frames
+  "framed_center", "listing_panel"      : 150–210 frames
+  "stats_grid"                          : 150–210 frames
+  "editorial_right/left"                : 150–210 frames
+  "callout", "floating_card"            : 90–150 frames
+  "split_specs", "split_band"           : 120–180 frames
+  "spec_table", "card_panel"            : 180–240 frames
+  "duo_split", "trio_mosaic"            : 180–240 frames
+  "price_reveal"                        : 150–210 frames
+  "feature_hero"                        : 180–270 frames
+  Min 90 frames · Max 300 frames.
+
+TASK E — Strict usage limits:
+  • "letter_box"   → FORBIDDEN
+  • "spotlight"    → max 1 time
+  • "duo_split"    → max 1 time
+  • "trio_mosaic"  → max 1 time (mid-video only)
+  • "price_reveal" → exactly 1 time (near end)
+  • "feature_hero" → exactly 1 time (last shot)
+  • "stats_grid"   → max 1 time
+  • "callout"      → close-up detail photos only, max 2 times
+
+Target ~${clean.length * 175} frames total (~${Math.round(clean.length * 5.8)} sn).
+${jsonOutputBlock}`;
+
+    // ── Select prompt by format ──────────────────────────────────────────────
+    let promptText: string;
+    switch (aspectRatio) {
+      case "9:16": promptText = vertical916Prompt; break;
+      case "3:4":  promptText = vertical34Prompt;  break;
+      case "4:3":  promptText = classic43Prompt;   break;
+      case "1:1":  promptText = square11Prompt;    break;
+      default:     promptText = landscape169Prompt; break;
+    }
     if (userNotes) {
       promptText += `\n\n━━ USER NOTES (HIGH PRIORITY) ━━\n${userNotes}\n`;
     }
@@ -360,7 +518,7 @@ NO variant repeated > ${maxRepeat} times · NO two consecutive same variant.`;
     const jsonMatch = rawText.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
-      throw new Error("Claude geçerli JSON döndürmedi: " + rawText.slice(0, 200));
+      throw new Error("AI geçerli JSON döndürmedi: " + rawText.slice(0, 200));
     }
 
     return NextResponse.json(JSON.parse(jsonMatch[0]));

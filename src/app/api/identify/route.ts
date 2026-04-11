@@ -40,11 +40,13 @@ export async function POST(req: Request) {
 2) Güçlü çıkarım (rozet, trim, kasa tipi, vites/çekiş/yenilikler gibi görsel ipuçları)
 
 Kural:
-- Aşağıdaki alanlar fotoğrafta yoksa / çıkarılamıyorsa boş string ("") bırak:
+- Aşağıdaki alanlar fotoğrafta yoksa / çıkarılamıyorsa boş string ("") bırak ve ASLA uydurma/varsayma:
   price, km, ilanTarihi, garanti, agirHasarKayitli, plaka, ctaPhone
+- "price" ve "km" alanları özellikle kritik: fotoğrafta net değilse "" bırak (tahmin etme).
 - Diğer alanlarda (özellikle carBrand, carModel, year, kasa, yakit, vites, renk, cekis, motor*) mümkünse boş bırakma.
 - year alanı: kesin değilse bile, fotoğrafa göre en olası YAKIN yılı yaz (ör. kasa/ön-arka tasarım, far-stop, iç ekran, trim/rozet vb. ipuçlarıyla). Yine de hiçbir ipucu yoksa "" bırak.
 - Asla ek metin yazma; sadece JSON.
+- JSON içinde "-" / "—" gibi placeholder değerler kullanma; bilgi yoksa sadece "" döndür.
 
 Aşağıdaki JSON formatında yanıt ver:
 {

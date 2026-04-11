@@ -106,6 +106,12 @@ export const OUTRO_FRAMES = 90;
 
 type VideoLanguage = LanguageCode;
 
+function present(v?: string): string | undefined {
+  if (typeof v !== "string") return undefined;
+  const t = v.trim();
+  return t.length ? t : undefined;
+}
+
 const VIDEO_I18N: Record<
   VideoLanguage,
   {
@@ -1095,6 +1101,22 @@ function MediaSlide({
   const aracDurumuT = translateEnumValue(videoLanguage, "condition", aracDurumu);
   const renkT = translateEnumValue(videoLanguage, "color", renk);
 
+  // Typography scaling: portrait/square frames need larger type for readability.
+  // We intentionally scale small labels more aggressively than big headings.
+  const format = aspectRatio ?? "16:9";
+  const smallScale =
+    format === "9:16" ? 1.55
+    : format === "3:4" ? 1.40
+    : format === "1:1" ? 1.30
+    : 1.0;
+  const midScale =
+    format === "9:16" ? 1.18
+    : format === "3:4" ? 1.12
+    : format === "1:1" ? 1.08
+    : 1.0;
+  const fsSmall = (n: number) => Math.round(n * smallScale);
+  const fsMid = (n: number) => Math.round(n * midScale);
+
   const frame = useCurrentFrame();
   const startFrame = getItemStartFrame(items, index, preset.crossfadeFrames);
   const duration = getItemDuration(item);
@@ -1285,12 +1307,17 @@ function MediaSlide({
   // ─── split_specs: Sol görsel + sağ spec paneli ────────────
   if (sceneVariant === "split_specs") {
     const L = (VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr).labels;
-    const specs = [
-      { label: L.km,                 value: km       || "—",  highlight: false },
-      { label: L.enginePower,        value: motorGucu || motor || "—", highlight: false },
-      { label: L.engineDisplacement, value: motorHacmi || "—", highlight: false },
-      { label: L.price,              value: price,             highlight: true  },
-    ];
+    const specs = ([
+      present(km) ? { label: L.km, value: present(km)!, highlight: false } : null,
+      present(motorGucu) || present(motor)
+        ? { label: L.enginePower, value: (present(motorGucu) ?? present(motor))!, highlight: false }
+        : null,
+      present(motorHacmi)
+        ? { label: L.engineDisplacement, value: present(motorHacmi)!, highlight: false }
+        : null,
+      // price zorunlu: her zaman göster
+      { label: L.price, value: price, highlight: true },
+    ]).filter(Boolean) as { label: string; value: string; highlight: boolean }[];
 
     return (
       <AbsoluteFill style={{ opacity, overflow: "hidden", background: "#040406" }}>
@@ -1363,7 +1390,7 @@ function MediaSlide({
                 <div
                   style={{
                     fontFamily: "sans-serif",
-                    fontSize: 11,
+                    fontSize: fsSmall(11),
                     letterSpacing: "0.16em",
                     color: "rgba(255,255,255,0.62)",
                     textTransform: "uppercase",
@@ -1375,7 +1402,7 @@ function MediaSlide({
                 <div
                   style={{
                     fontFamily: "sans-serif",
-                    fontSize: spec.highlight ? 48 : 30,
+                    fontSize: spec.highlight ? fsMid(48) : fsMid(30),
                     fontWeight: spec.highlight ? 700 : 600,
                     color: spec.highlight ? "#f8c96a" : "rgba(255,255,255,0.92)",
                     letterSpacing: spec.highlight ? "1px" : "0.5px",
@@ -1920,7 +1947,7 @@ function MediaSlide({
           {/* Kategori rozeti */}
           {cat && (
             <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.28)", borderRadius: 8, padding: "5px 14px" }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
             </div>
           )}
         </div>
@@ -1932,28 +1959,28 @@ function MediaSlide({
 
           {/* Marka + Seri + Model */}
           <div style={{ opacity: t1Op, transform: `translateX(${slideX}px)`, marginBottom: 10 }}>
-            <span style={{ fontFamily: "sans-serif", fontSize: 34, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.5px" }}>{carBrand}</span>
-            {seri && <span style={{ fontFamily: "sans-serif", fontSize: 20, fontWeight: 600, color: "rgba(255,255,255,0.5)", marginLeft: 10 }}>{seri}</span>}
-            <span style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 400, color: "rgba(255,255,255,0.65)", marginLeft: 10, letterSpacing: "0px" }}>{carModel}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: fsMid(34), fontWeight: 800, color: "#ffffff", letterSpacing: "-0.5px" }}>{carBrand}</span>
+            {seri && <span style={{ fontFamily: "sans-serif", fontSize: fsMid(20), fontWeight: 600, color: "rgba(255,255,255,0.5)", marginLeft: 10 }}>{seri}</span>}
+            <span style={{ fontFamily: "sans-serif", fontSize: fsMid(22), fontWeight: 400, color: "rgba(255,255,255,0.65)", marginLeft: 10, letterSpacing: "0px" }}>{carModel}</span>
           </div>
 
           {/* Yıl + Araç Durumu + Fiyat satırı */}
           <div style={{ opacity: t2Op, transform: `translateX(${slideX * 0.6}px)`, display: "flex", alignItems: "center", gap: 24, marginBottom: 14, flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.modelYear}</div>
-              <div style={{ fontFamily: "sans-serif", fontSize: 20, fontWeight: 700, color: "rgba(255,255,255,0.88)" }}>{year}</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.modelYear}</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: fsMid(20), fontWeight: 700, color: "rgba(255,255,255,0.88)" }}>{year}</div>
             </div>
             {aracDurumu && <>
               <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
               <div>
-                <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.vehicleCondition}</div>
-                <div style={{ fontFamily: "sans-serif", fontSize: 18, fontWeight: 600, color: "rgba(255,255,255,0.80)" }}>{aracDurumuT}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.vehicleCondition}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: fsMid(18), fontWeight: 600, color: "rgba(255,255,255,0.80)" }}>{aracDurumuT}</div>
               </div>
             </>}
             <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
             <div>
-              <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.salePrice}</div>
-              <div style={{ fontFamily: "sans-serif", fontSize: 24, fontWeight: 700, color: "#f8c96a", textShadow: "0 0 18px rgba(248,201,106,0.38)" }}>{price}</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.salePrice}</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: fsMid(24), fontWeight: 700, color: "#f8c96a", textShadow: "0 0 18px rgba(248,201,106,0.38)" }}>{price}</div>
             </div>
           </div>
 
@@ -1961,11 +1988,11 @@ function MediaSlide({
           <div style={{ opacity: t3Op, display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{ width: 3, height: 14, background: "#f8c96a", borderRadius: 2, flexShrink: 0 }} />
             {(motorGucu || motor || km) ? (
-              <span style={{ fontFamily: "sans-serif", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.75)", letterSpacing: "0.04em" }}>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(12), fontWeight: 600, color: "rgba(255,255,255,0.75)", letterSpacing: "0.04em" }}>
                 {[motorGucu || motor, km, kasaT].filter(Boolean).join("  ·  ")}
               </span>
             ) : (
-              <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 400, color: "rgba(255,255,255,0.32)", letterSpacing: "0.08em" }}>{T.detailedInfoContact}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), fontWeight: 400, color: "rgba(255,255,255,0.32)", letterSpacing: "0.08em" }}>{T.detailedInfoContact}</span>
             )}
           </div>
         </div>
@@ -1984,12 +2011,12 @@ function MediaSlide({
     const r4Op     = interpolate(localFrame, [36, 52], [0, 1], { extrapolateRight: "clamp" });
     const lineW    = interpolate(localFrame, [6, 26], [0, 56], { extrapolateRight: "clamp" });
 
-    const infoRows = [
-      { label: L.km,       value: km || "—",    gold: false, op: r1Op },
-      { label: L.gearbox,  value: vitesT || "—", gold: false, op: r2Op },
-      { label: L.fuel,     value: yakitT || "—", gold: false, op: r3Op },
-      { label: L.body,     value: kasaT || "—",  gold: true,  op: r4Op },
-    ];
+    const infoRows = ([
+      present(km) ? { label: L.km, value: present(km)!, gold: false, op: r1Op } : null,
+      present(vitesT) ? { label: L.gearbox, value: present(vitesT)!, gold: false, op: r2Op } : null,
+      present(yakitT) ? { label: L.fuel, value: present(yakitT)!, gold: false, op: r3Op } : null,
+      present(kasaT) ? { label: L.body, value: present(kasaT)!, gold: true, op: r4Op } : null,
+    ]).filter(Boolean) as { label: string; value: string; gold: boolean; op: number }[];
 
     return (
       <AbsoluteFill style={{ opacity, background: "#04050a" }}>
@@ -2011,7 +2038,7 @@ function MediaSlide({
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,5,10,0.45) 0%, transparent 50%)", pointerEvents: "none" }} />
           {cat && (
             <div style={{ position: "absolute", bottom: 18, left: 20 }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>{cat}</span>
             </div>
           )}
         </div>
@@ -2033,12 +2060,12 @@ function MediaSlide({
               paddingBottom: 18,
               borderBottom: ri < infoRows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
             }}>
-              <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.20em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 6 }}>
+              <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), letterSpacing: "0.20em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 6 }}>
                 {row.label}
               </div>
               <div style={{
                 fontFamily: "sans-serif",
-                fontSize: row.gold ? 36 : 26,
+                fontSize: row.gold ? fsMid(36) : fsMid(26),
                 fontWeight: 700,
                 color: row.gold ? "#f8c96a" : "rgba(255,255,255,0.92)",
                 letterSpacing: row.gold ? "0.5px" : "0.2px",
@@ -2103,28 +2130,34 @@ function MediaSlide({
           opacity: textOp, transform: `translateY(${textY}px)`,
         }}>
           <div style={{ width: lineW, height: 2.5, background: "#f8c96a", borderRadius: 2, marginBottom: 26, boxShadow: "0 0 14px rgba(248,201,106,0.52)" }} />
-          <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 14 }}>
+          <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 14 }}>
             {cat ?? T.vehicleDetail}
           </div>
-          <div style={{ fontFamily: "sans-serif", fontSize: 40, fontWeight: 800, color: "#ffffff", lineHeight: 1.05, letterSpacing: "-0.5px", marginBottom: 6 }}>
+          <div style={{ fontFamily: "sans-serif", fontSize: fsMid(40), fontWeight: 800, color: "#ffffff", lineHeight: 1.05, letterSpacing: "-0.5px", marginBottom: 6 }}>
             {carBrand}
           </div>
-          <div style={{ fontFamily: "sans-serif", fontSize: 26, fontWeight: 400, color: "rgba(255,255,255,0.82)", lineHeight: 1.2, marginBottom: 22, letterSpacing: "0.2px" }}>
+          <div style={{ fontFamily: "sans-serif", fontSize: fsMid(26), fontWeight: 400, color: "rgba(255,255,255,0.82)", lineHeight: 1.2, marginBottom: 22, letterSpacing: "0.2px" }}>
             {carModel}
           </div>
           <div style={{ height: 1, background: "rgba(255,255,255,0.08)", marginBottom: 22 }} />
           {/* Performans detayları: Motor Gücü, Çekiş, Renk + Fiyat */}
-          {[
-            { label: (T.labels.enginePower), value: motorGucu || motor || "—",  gold: false },
-            { label: (T.labels.drivetrain),  value: cekisT  || "—",  gold: false },
-            { label: (T.labels.color),       value: renkT   || "—",  gold: false },
-            { label: (T.labels.price),       value: price,           gold: true  },
-          ].map((d, di) => {
+          {([
+            present(motorGucu) || present(motor)
+              ? { label: (T.labels.enginePower), value: (present(motorGucu) ?? present(motor))!, gold: false }
+              : null,
+            present(cekisT)
+              ? { label: (T.labels.drivetrain), value: present(cekisT)!, gold: false }
+              : null,
+            present(renkT)
+              ? { label: (T.labels.color), value: present(renkT)!, gold: false }
+              : null,
+            { label: (T.labels.price), value: price, gold: true },
+          ].filter(Boolean) as { label: string; value: string; gold: boolean }[]).map((d, di) => {
             const dOp = interpolate(localFrame, [18 + di * 10, 38 + di * 10], [0, 1], { extrapolateRight: "clamp" });
             return (
               <div key={d.label} style={{ opacity: dOp, marginBottom: di < 3 ? 14 : 0 }}>
-                <div style={{ fontFamily: "sans-serif", fontSize: 9, letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 4 }}>{d.label}</div>
-                <div style={{ fontFamily: "sans-serif", fontSize: d.gold ? 28 : 18, fontWeight: d.gold ? 700 : 600, color: d.gold ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: d.gold ? "0.5px" : "0.1px", textShadow: d.gold ? "0 0 20px rgba(248,201,106,0.38)" : "none" }}>
+                <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(9), letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 4 }}>{d.label}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: d.gold ? fsMid(28) : fsMid(18), fontWeight: d.gold ? 700 : 600, color: d.gold ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: d.gold ? "0.5px" : "0.1px", textShadow: d.gold ? "0 0 20px rgba(248,201,106,0.38)" : "none" }}>
                   {d.value}
                 </div>
               </div>
@@ -2170,7 +2203,7 @@ function MediaSlide({
           {/* Kategori etiketi */}
           {cat && (
             <div style={{ marginBottom: 20, opacity: textOp }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: "0.28em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 800, letterSpacing: "0.28em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
             </div>
           )}
 
@@ -2179,8 +2212,8 @@ function MediaSlide({
 
           {/* Marka + Model */}
           <div style={{ opacity: textOp, transform: `translateY(${textY}px)`, marginBottom: 8 }}>
-            <div style={{ fontFamily: "sans-serif", fontSize: 46, fontWeight: 900, color: "#ffffff", letterSpacing: "-0.5px", lineHeight: 1 }}>{carBrand}</div>
-            <div style={{ fontFamily: "sans-serif", fontSize: 24, fontWeight: 300, color: "rgba(255,255,255,0.80)", letterSpacing: "0.5px", marginTop: 6, lineHeight: 1.2 }}>{carModel}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: fsMid(46), fontWeight: 900, color: "#ffffff", letterSpacing: "-0.5px", lineHeight: 1 }}>{carBrand}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: fsMid(24), fontWeight: 300, color: "rgba(255,255,255,0.80)", letterSpacing: "0.5px", marginTop: 6, lineHeight: 1.2 }}>{carModel}</div>
           </div>
 
           {/* Araç detayları */}
@@ -2192,8 +2225,8 @@ function MediaSlide({
                 const rX  = interpolate(localFrame, [d, d + 16], [18, 0], { extrapolateRight: "clamp" });
                 return (
                   <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, display: "flex", alignItems: "baseline", gap: 12 }}>
-                    <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", minWidth: 112, textShadow: LABEL_SHADOW }}>{row.label}</span>
-                    <span style={{ fontFamily: "sans-serif", fontSize: 16, fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>{row.value}</span>
+                    <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), fontWeight: 700, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", minWidth: 112, textShadow: LABEL_SHADOW }}>{row.label}</span>
+                    <span style={{ fontFamily: "sans-serif", fontSize: fsMid(16), fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>{row.value}</span>
                   </div>
                 );
               })}
@@ -2202,7 +2235,7 @@ function MediaSlide({
 
           {/* Fiyat — büyük ve gold */}
           <div style={{ opacity: priceOp, transform: `scale(${priceS})`, transformOrigin: "left center", marginTop: detailRows.length > 0 ? 0 : 32 }}>
-            <div style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: "0.24em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 10, textShadow: LABEL_SHADOW }}>{T.labels.price}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), fontWeight: 800, letterSpacing: "0.24em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 10, textShadow: LABEL_SHADOW }}>{T.labels.price}</div>
             <div style={{ fontFamily: "sans-serif", fontSize: 64, fontWeight: 900, color: "#f8c96a", letterSpacing: "-1px", lineHeight: 1, textShadow: "0 0 60px rgba(248,201,106,0.45), 0 4px 20px rgba(0,0,0,0.5)" }}>{price}</div>
           </div>
         </div>
@@ -2223,7 +2256,7 @@ function MediaSlide({
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(5,5,8,0.4) 0%, transparent 50%)", pointerEvents: "none" }} />
           {/* Yıl rozeti */}
           <div style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.60)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "6px 14px" }}>
-            <span style={{ fontFamily: "sans-serif", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.88)", letterSpacing: "0.08em" }}>{year}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(12), fontWeight: 700, color: "rgba(255,255,255,0.88)", letterSpacing: "0.08em" }}>{year}</span>
           </div>
         </div>
       </AbsoluteFill>
@@ -2307,12 +2340,14 @@ function MediaSlide({
     const photoY   = interpolate(localFrame, [0, 22], [16, 0], { extrapolateRight: "clamp", easing: easeOut });
     const lineW    = interpolate(localFrame, [16, 34], [0, 56], { extrapolateRight: "clamp" });
 
-    const statItems = [
-      { label: T.labels.km,          value: km         || "—", icon: "📍" },
-      { label: T.labels.enginePower, value: motorGucu  || motor || "—", icon: "⚡" },
-      { label: T.labels.gearbox,     value: vitesT     || "—", icon: "⚙" },
-      { label: T.labels.fuel,        value: yakitT     || "—", icon: "🛢" },
-    ];
+    const statItems = ([
+      present(km) ? { label: T.labels.km, value: present(km)!, icon: "📍" } : null,
+      present(motorGucu) || present(motor)
+        ? { label: T.labels.enginePower, value: (present(motorGucu) ?? present(motor))!, icon: "⚡" }
+        : null,
+      present(vitesT) ? { label: T.labels.gearbox, value: present(vitesT)!, icon: "⚙" } : null,
+      present(yakitT) ? { label: T.labels.fuel, value: present(yakitT)!, icon: "🛢" } : null,
+    ].filter(Boolean) as { label: string; value: string; icon: string }[]);
 
     return (
       <AbsoluteFill style={{ opacity, background: "#04050a" }}>
@@ -2335,9 +2370,9 @@ function MediaSlide({
           {/* Kategori + marka overlay */}
           <div style={{ position: "absolute", bottom: 16, left: 20, display: "flex", alignItems: "center", gap: 10 }}>
             {cat && <div style={{ background: "rgba(0,0,0,0.60)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.30)", borderRadius: 8, padding: "4px 12px" }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
             </div>}
-            <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.70)", letterSpacing: "0.05em" }}>{carBrand} {carModel}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(13), fontWeight: 600, color: "rgba(255,255,255,0.70)", letterSpacing: "0.05em" }}>{carBrand} {carModel}</span>
           </div>
         </div>
 
@@ -2345,7 +2380,7 @@ function MediaSlide({
         <div style={{ position: "absolute", top: "49%", left: 40, right: 40, padding: "12px 4px 10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
             <div style={{ width: lineW, height: 2, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.2))", borderRadius: 2, boxShadow: "0 0 10px rgba(248,201,106,0.4)" }} />
-            <span style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, letterSpacing: "0.22em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", whiteSpace: "nowrap" }}>{carBrand} · {year}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 700, letterSpacing: "0.22em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", whiteSpace: "nowrap" }}>{carBrand} · {year}</span>
           </div>
           <div style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.3px", lineHeight: 1 }}>{price}</div>
         </div>
@@ -2377,7 +2412,7 @@ function MediaSlide({
                 justifyContent: "center",
                 backdropFilter: "blur(12px)",
               }}>
-                <div style={{ fontFamily: "sans-serif", fontSize: 9, fontWeight: 700, letterSpacing: "0.20em", color: "rgba(255,255,255,0.60)", textTransform: "uppercase", marginBottom: 6 }}>{s.label}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(9), fontWeight: 700, letterSpacing: "0.20em", color: "rgba(255,255,255,0.60)", textTransform: "uppercase", marginBottom: 6 }}>{s.label}</div>
                 <div style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 800, color: si === 1 ? "#f8c96a" : "rgba(255,255,255,0.95)", letterSpacing: "-0.2px", lineHeight: 1, textShadow: si === 1 ? "0 0 20px rgba(248,201,106,0.40)" : "none" }}>{s.value}</div>
               </div>
             );

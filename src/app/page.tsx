@@ -187,7 +187,7 @@ export default function Home() {
             {
               icon: <Wand2 className="w-6 h-6 text-[var(--primary)]" />,
               title: "AI destekli montaj",
-              desc: "Claude görselleri analiz edip sırayı seçer; Remotion ile geçişler, renk ve şablon otomatik uygulanır.",
+              desc: "AI görselleri analiz edip sırayı seçer; Remotion ile geçişler, renk ve şablon otomatik uygulanır.",
             },
             {
               icon: <Film className="w-6 h-6 text-[var(--primary)]" />,

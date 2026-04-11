@@ -15,17 +15,17 @@ export const MUSIC_TRACKS: readonly MusicTrack[] = [
   { id: "none", label: "Müzik yok" },
   {
     id: "smooth1",
-    label: "Electronic",
+    label: "Elektronik (Modern)",
     src: "/music/musicelectronic.mp3",
   },
   {
     id: "smooth2",
-    label: "Fast",
+    label: "Dinamik (Hızlı)",
     src: "/music/musicfast.mp3",
   },
   {
     id: "smooth3",
-    label: "Slow",
+    label: "Sinematik (Yavaş)",
     src: "/music/musicslow.mp3",
   },
 ] as const;

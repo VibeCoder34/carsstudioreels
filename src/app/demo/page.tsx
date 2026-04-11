@@ -129,12 +129,13 @@ export default function DemoPage() {
     ilanTarihi: "",
   });
   const [isIdentifying, setIsIdentifying] = useState(false);
+  const [identifyAttempted, setIdentifyAttempted] = useState(false);
   const [reelStyle, setReelStyle] = useState<ReelStyle>("cinematic");
   const [videoLanguage, setVideoLanguage] = useState<LanguageCode>("tr");
   const [videoNotes, setVideoNotes] = useState("");
   const [musicTrackId, setMusicTrackId] = useState<MusicTrackId>("smooth1");
-  const [musicVolume, setMusicVolume] = useState(0.45);
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
+  const musicVolume = voiceoverEnabled ? 0.6 : 0.8;
   /** TTS kısmen/başarısız olduğunda önizlemede gösterilir */
   const [voiceoverTtsNotice, setVoiceoverTtsNotice] = useState("");
   const [isDragging, setIsDragging] = useState(false);
@@ -194,6 +195,7 @@ export default function DemoPage() {
       seri: "", aracDurumu: "İkinci El", motorGucu: "", motorHacmi: "",
       cekis: "", garanti: "", agirHasarKayitli: "", plaka: "", ilanTarihi: "",
     });
+    setIdentifyAttempted(true);
     setStep("identify");
     setTimeout(() => identifyCarFromPhotos(files), 0);
   }, [files, identifyCarFromPhotos]);
@@ -306,7 +308,7 @@ export default function DemoPage() {
   return (
     <div className="min-h-screen flex flex-col bg-[var(--background)] text-[var(--foreground)]">
 
-      <header className="dashboard-header flex flex-wrap items-center justify-between gap-4 px-6 py-3">
+      <header className="dashboard-header flex flex-wrap items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-8 md:gap-14">
           <Link href="/" className="flex items-center gap-2 text-xl font-bold tracking-tight">
             <span className="text-[var(--foreground)] lowercase">car</span>
@@ -330,7 +332,7 @@ export default function DemoPage() {
       </header>
 
       {(step === "preview" || step === "analyzing" || step === "identify") && (
-        <div className="dashboard-toolbar flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+        <div className="dashboard-toolbar flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 sm:px-6">
           {step === "analyzing" ? (
             <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
               <Brain className="w-4 h-4 text-[var(--primary)]" />
@@ -346,7 +348,7 @@ export default function DemoPage() {
               Geri dön
             </button>
           )}
-          <p className="text-xs text-[var(--muted-foreground)]">
+          <p className="text-xs text-[var(--muted-foreground)] sm:text-right">
             {step === "preview" ? "Önizleme" : step === "identify" ? "Araç bilgileri" : "İşleniyor…"}
           </p>
         </div>
@@ -370,7 +372,6 @@ export default function DemoPage() {
             onVideoLanguageChange={setVideoLanguage}
             onVideoNotesChange={setVideoNotes}
             onMusicTrackIdChange={setMusicTrackId}
-            onMusicVolumeChange={setMusicVolume}
             onVoiceoverEnabledChange={setVoiceoverEnabled}
             onAspectRatioChange={setAspectRatio}
             onStyleChange={setReelStyle}
@@ -388,6 +389,7 @@ export default function DemoPage() {
             mediaItems={mediaItems}
             form={form}
             isIdentifying={isIdentifying}
+            identifyAttempted={identifyAttempted}
             onFormChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
             onConfirm={handleAnalyze}
             onBack={() => setStep("upload")}
@@ -498,7 +500,7 @@ function UploadStep({
   mediaItems, isDragging, fileInputRef, error,
   aspectRatio, reelStyle, flowRec,
   videoLanguage, videoNotes, musicTrackId, musicVolume, voiceoverEnabled,
-  onVideoLanguageChange, onVideoNotesChange, onMusicTrackIdChange, onMusicVolumeChange, onVoiceoverEnabledChange,
+  onVideoLanguageChange, onVideoNotesChange, onMusicTrackIdChange, onVoiceoverEnabledChange,
   onAspectRatioChange, onStyleChange,
   onDrop, onDragOver, onDragLeave, onFileChange,
   onRemoveItem, onNext,
@@ -518,7 +520,6 @@ function UploadStep({
   onVideoLanguageChange: (v: LanguageCode) => void;
   onVideoNotesChange: (v: string) => void;
   onMusicTrackIdChange: (v: MusicTrackId) => void;
-  onMusicVolumeChange: (v: number) => void;
   onVoiceoverEnabledChange: (v: boolean) => void;
   onAspectRatioChange: (ar: AspectRatioOption) => void;
   onStyleChange: (style: ReelStyle) => void;
@@ -562,18 +563,8 @@ function UploadStep({
       </div>
 
       <div className="flex-1 overflow-auto px-4 py-6 sm:px-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
-          <div className="lg:col-span-2 space-y-4 sm:space-y-5 min-w-0">
-
-            <div className="demo-card p-4 sm:p-4 flex flex-wrap items-center gap-x-3 gap-y-1 bg-[var(--primary)]/[0.06] border-[var(--primary)]/20">
-              <div className="flex items-center gap-2 min-w-0">
-                <Sparkles className="w-4 h-4 text-[var(--primary)] shrink-0" />
-                <span className="text-sm font-semibold text-[var(--primary)]">Prestige şablonu</span>
-              </div>
-              <span className="text-xs text-[var(--muted-foreground)] w-full sm:w-auto sm:ml-1">
-                Sinematik · Ken Burns · CTA outro
-              </span>
-            </div>
+        <div className="max-w-6xl mx-auto grid grid-cols-1 gap-6 sm:gap-8 items-start">
+          <div className="space-y-4 sm:space-y-5 min-w-0">
 
             {/* Fotoğraf yükleme (yalnızca ilk seçimde) */}
             {!hasMedia && (
@@ -701,7 +692,7 @@ function UploadStep({
               {/* Çıktı formatı */}
               <div className="pt-2 space-y-2">
                 <div className="text-xs text-[var(--muted-foreground)]">Çıktı formatı</div>
-                <div className="grid grid-cols-5 gap-2">
+                <div className="flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
                   {ASPECT_RATIO_OPTIONS.map((opt) => {
                     const active = aspectRatio === opt.value;
                     return (
@@ -709,7 +700,7 @@ function UploadStep({
                         key={opt.value}
                         type="button"
                         onClick={() => onAspectRatioChange(opt.value)}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-[var(--radius)] border text-center transition-all ${
+                        className={`flex flex-col items-center gap-1 p-2 rounded-[var(--radius)] border text-center transition-all shrink-0 min-w-[64px] ${
                           active
                             ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
                             : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
@@ -722,11 +713,7 @@ function UploadStep({
                     );
                   })}
                 </div>
-                {(aspectRatio === "9:16" || aspectRatio === "3:4" || aspectRatio === "1:1") && (
-                  <p className="text-[10px] text-[var(--muted-foreground)]">
-                    Yatay fotoğraflar otomatik bulanık arka plan ile gösterilir.
-                  </p>
-                )}
+                {null}
               </div>
 
               {/* Video dili */}
@@ -788,18 +775,9 @@ function UploadStep({
                     <option key={t.id} value={t.id}>{t.label}</option>
                   ))}
                 </select>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-[var(--muted-foreground)] w-[72px]">Seviye</span>
-                  <input
-                    type="range"
-                    min={0}
-                    max={1}
-                    step={0.05}
-                    value={musicVolume}
-                    onChange={(e) => onMusicVolumeChange(Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <span className="text-xs text-[var(--muted-foreground)] w-[44px] tabular-nums">
+                <div className="flex items-center justify-between gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)] px-3 py-2.5">
+                  <span className="text-xs text-[var(--muted-foreground)]">Müzik seviyesi</span>
+                  <span className="text-xs font-semibold text-[var(--foreground)] tabular-nums">
                     {musicVolume.toFixed(2)}
                   </span>
                 </div>
@@ -842,14 +820,17 @@ function UploadStep({
               {hasMedia && <ChevronRight className="w-5 h-5" />}
             </button>
           </div>
+        </div>
 
-          <aside className="lg:col-span-1 w-full">
-            <div className="card-gradient card-gradient--aside sticky top-4 sm:top-6 min-h-[260px] sm:min-h-[300px]">
-              <div className="flex gap-3 w-full">
+        {/* Ekiple görüşme — sayfanın en altında */}
+        <div className="max-w-6xl mx-auto mt-6 lg:mt-8">
+          <div className="card-gradient card-gradient--aside min-h-[220px] sm:min-h-[240px]">
+            <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+              <div className="flex gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[var(--radius)] bg-white/18 backdrop-blur-sm">
                   <Sparkles className="w-5 h-5 text-white" strokeWidth={2} />
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0">
                   <h3 className="text-base sm:text-lg font-bold leading-snug text-white">
                     Ekibimizle görüşme planlayın
                   </h3>
@@ -860,12 +841,12 @@ function UploadStep({
               </div>
               <a
                 href="mailto:hello@carstudio.example"
-                className="inline-flex w-full items-center justify-center rounded-[var(--radius-pill)] bg-white px-5 py-3 text-sm font-semibold text-[var(--primary)] shadow-md transition-opacity hover:opacity-95 mt-1"
+                className="inline-flex w-full sm:w-auto items-center justify-center rounded-[var(--radius-pill)] bg-white px-5 py-3 text-sm font-semibold text-[var(--primary)] shadow-md transition-opacity hover:opacity-95"
               >
                 Randevu al
               </a>
             </div>
-          </aside>
+          </div>
         </div>
       </div>
     </>
@@ -877,16 +858,27 @@ function UploadStep({
 const INPUT_CLS = "w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/20 focus:border-[var(--ring)]";
 
 function IdentifyStep({
-  mediaItems, form, isIdentifying, onFormChange, onConfirm, onBack,
+  mediaItems, form, isIdentifying, identifyAttempted, onFormChange, onConfirm, onBack,
 }: {
   mediaItems: MediaItem[];
   form: FormData;
   isIdentifying: boolean;
+  identifyAttempted: boolean;
   onFormChange: (field: keyof FormData, value: string) => void;
   onConfirm: () => void;
   onBack: () => void;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const requiredMissing = useMemo(() => {
+    const missing: string[] = [];
+    if (!form.price.trim()) missing.push("Fiyat");
+    if (!form.km.trim()) missing.push("KM");
+    return missing;
+  }, [form.km, form.price]);
+  const canConfirm = !isIdentifying && requiredMissing.length === 0;
+  const showRequiredUi = identifyAttempted && !isIdentifying;
+  const isPriceMissing = showRequiredUi && !form.price.trim();
+  const isKmMissing = showRequiredUi && !form.km.trim();
 
   return (
     <div className="flex-1 overflow-auto px-4 py-6 sm:px-6 bg-[var(--background)]">
@@ -940,8 +932,15 @@ function IdentifyStep({
             <div className="grid grid-cols-2 gap-3">
               {(["carBrand", "carModel", "year", "price"] as const).map((field) => (
                 <div key={field}>
-                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">
-                    {field === "carBrand" ? "Marka" : field === "carModel" ? "Model" : field === "year" ? "Yıl" : "Fiyat"}
+                  <label className="flex items-center justify-between gap-2 text-xs text-[var(--muted-foreground)] mb-1.5">
+                    <span>
+                      {field === "carBrand" ? "Marka" : field === "carModel" ? "Model" : field === "year" ? "Yıl" : "Fiyat"}
+                    </span>
+                    {showRequiredUi && field === "price" && (
+                      <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                        Zorunlu
+                      </span>
+                    )}
                   </label>
                   <input
                     value={form[field]}
@@ -949,6 +948,11 @@ function IdentifyStep({
                     placeholder={field === "carBrand" ? "BMW" : field === "carModel" ? "320i" : field === "year" ? "2020" : "₺500.000"}
                     className={INPUT_CLS}
                   />
+                  {field === "price" && isPriceMissing && (
+                    <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                      Lütfen fiyat bilgisini girin.
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -969,13 +973,25 @@ function IdentifyStep({
                 ] as [keyof FormData, string, string][]
               ).map(([field, label, placeholder]) => (
                 <div key={field}>
-                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">{label}</label>
+                  <label className="flex items-center justify-between gap-2 text-xs text-[var(--muted-foreground)] mb-1.5">
+                    <span>{label}</span>
+                    {showRequiredUi && field === "km" && (
+                      <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                        Zorunlu
+                      </span>
+                    )}
+                  </label>
                   <input
                     value={form[field]}
                     onChange={(e) => onFormChange(field, e.target.value)}
                     placeholder={placeholder}
                     className={INPUT_CLS}
                   />
+                  {field === "km" && isKmMissing && (
+                    <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                      Lütfen kilometre bilgisini girin.
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1034,6 +1050,11 @@ function IdentifyStep({
         </div>
 
         {/* Butonlar */}
+        {showRequiredUi && (
+          <div className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)] px-4 py-3 text-xs text-[var(--muted-foreground)]">
+            Otomatik doldurulan bilgiler hatalı olabilir. Lütfen kontrol edin.
+          </div>
+        )}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             type="button"
@@ -1045,21 +1066,24 @@ function IdentifyStep({
           </button>
           <button
             type="button"
-            onClick={onConfirm}
-            disabled={isIdentifying}
+              onClick={() => {
+                if (!canConfirm) return;
+                onConfirm();
+              }}
+              disabled={!canConfirm}
             className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-[var(--radius-pill)] font-semibold text-base transition-all ${
-              isIdentifying
+                !canConfirm
                 ? "bg-[var(--muted)] text-[var(--muted-foreground)] cursor-not-allowed"
                 : "bg-gradient-to-r from-[var(--teal)] to-[var(--primary)] text-[var(--primary-foreground)] shadow-lg shadow-[var(--primary)]/20 hover:opacity-95"
             }`}
           >
             <Brain className="w-5 h-5" />
             Onayla ve kurguyu oluştur
-            {!isIdentifying && <ChevronRight className="w-5 h-5" />}
+              {canConfirm && <ChevronRight className="w-5 h-5" />}
           </button>
         </div>
         <p className="text-center text-xs text-[var(--muted-foreground)]">
-          Claude: kategori, yorum ve sahne kurgusu (~30–40 sn)
+          AI: kategori, yorum ve sahne kurgusu (~30–40 sn)
         </p>
       </div>
     </div>
@@ -1162,6 +1186,7 @@ function PreviewStep({
   const compWidth = dims.width;
   const compHeight = dims.height;
   const layout = aspectRatioToLayout(aspectRatio);
+  const isPortrait = layout === "portrait";
   const storyboard = analysisResult?.storyboard ?? [];
 
   /* ─── Render & download ─────────────────────────────────── */
@@ -1330,14 +1355,29 @@ function PreviewStep({
           </p>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-start justify-center">
+        <div
+          className={
+            isPortrait
+              ? "flex flex-col gap-8 items-start justify-center lg:grid lg:grid-cols-[420px_360px] lg:gap-10 lg:items-start lg:justify-center"
+              : "flex flex-col gap-8 items-start justify-center"
+          }
+        >
 
-          <div className="flex-shrink-0 w-full flex justify-center max-w-4xl mx-auto lg:mx-0">
-            <div className="relative w-full">
+          <div
+            className={`flex-shrink-0 w-full flex justify-center mx-auto lg:mx-0 ${
+              isPortrait
+                ? "max-w-[420px] sm:max-w-[460px] lg:max-w-[420px]"
+                : "max-w-4xl"
+            }`}
+          >
+            <div className="relative w-full" style={isPortrait ? { maxHeight: "78vh" } : undefined}>
               <div className="absolute inset-0 bg-gradient-to-br from-[var(--primary)]/20 to-transparent rounded-2xl blur-3xl -z-10 scale-105" />
               <div
                 className="relative rounded-xl overflow-hidden bg-black border border-[var(--border)] shadow-2xl shadow-black/30"
-                style={{ aspectRatio: `${compWidth}/${compHeight}` }}
+                style={{
+                  aspectRatio: `${compWidth}/${compHeight}`,
+                  ...(isPortrait ? { maxHeight: "78vh" } : null),
+                }}
               >
                 <Player
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1387,145 +1427,94 @@ function PreviewStep({
             </div>
           </div>
 
-          <div className="flex-1 w-full max-w-md mx-auto lg:mx-0 lg:max-w-sm space-y-4">
-
-            {analysisResult?.editing_notes_tr && (
-              <div className="demo-card border-[var(--primary)]/20 bg-[var(--primary)]/[0.06] p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Brain className="w-3.5 h-3.5 text-[var(--primary)]" />
-                  <span className="text-[10px] text-[var(--primary)] uppercase tracking-wider font-semibold">Kurgu notu</span>
-                </div>
-                <p className="text-xs text-[var(--foreground)] leading-relaxed">{analysisResult.editing_notes_tr}</p>
-              </div>
-            )}
-
-            {storyboard.length > 0 && (
-              <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 max-h-[520px] overflow-y-auto">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider">Sahne sırası &amp; şablon</div>
-                  <div className="text-[10px] text-[var(--primary)] font-medium">Şablonu değiştir ↓</div>
-                </div>
-                <div className="space-y-3">
-                  {storyboard.map((shot, i) => {
-                    const currentVariant = mediaItems[i]?.sceneVariant ?? shot.scene_variant as SceneVariant;
-                    return (
-                    <div key={`${shot.source_index}-${i}`} className="border-b border-[var(--border)] last:border-0 pb-3 last:pb-0">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="text-[10px] font-mono text-[var(--muted-foreground)] shrink-0">#{i + 1}</span>
-                        <span className="text-[11px] font-semibold text-[var(--foreground)] truncate flex-1">
-                          {categoryTitleTr(shot)}
-                        </span>
-                        <span className="text-[10px] text-[var(--muted-foreground)] shrink-0">
-                          <Star className="w-2.5 h-2.5 inline text-amber-400 mr-0.5" />
-                          {shot.quality_score}/10
-                        </span>
-                      </div>
-
-                      {/* Şablon seçici */}
-                      <div className="mb-1.5">
-                        <select
-                          value={currentVariant ?? ""}
-                          onChange={(e) => onVariantChange(i, e.target.value as SceneVariant)}
-                          className="w-full text-[11px] font-medium bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)] rounded-lg px-2.5 py-1.5 pr-6 appearance-none cursor-pointer hover:border-[var(--primary)]/50 transition-colors focus:outline-none focus:ring-1 focus:ring-[var(--primary)]/40"
-                          style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%236b7280' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 8px center" }}
-                        >
-                          {VARIANT_GROUPS.map((group) => (
-                            <optgroup key={group.label} label={group.label}>
-                              {group.variants.map((v) => (
-                                <option key={v} value={v}>{VARIANT_LABELS[v]}</option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
-                      </div>
-
-                      {shot.comment_tr && (
-                        <p className="text-[10px] text-[var(--muted-foreground)] leading-snug">{shot.comment_tr}</p>
-                      )}
-                      {voiceoverEnabled && shot.voiceover_text && (
-                        <p className="text-[11px] text-[var(--foreground)] leading-snug mt-1.5 pl-2 border-l-2 border-[var(--primary)]/40">
-                          <span className="text-[10px] uppercase tracking-wider text-[var(--primary)] font-semibold">Seslendirme</span>
-                          <br />
-                          {shot.voiceover_text}
-                        </p>
-                      )}
+          <div
+            className={`w-full ${
+              isPortrait
+                ? "mx-auto max-w-[420px] sm:max-w-[460px] lg:max-w-[420px]"
+                : "w-full max-w-4xl mx-auto"
+            }`}
+          >
+            <div className={isPortrait ? "lg:sticky lg:top-6" : ""}>
+              <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-4">
+                <div className={isPortrait ? "grid grid-cols-1 sm:grid-cols-2 gap-4" : "space-y-4"}>
+                  <div className={isPortrait ? "" : "pb-4 border-b border-[var(--border)]"}>
+                    <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Araç detayları</div>
+                    <div className="space-y-2">
+                      {[
+                        ["Marka", form.carBrand],
+                        ["Model", form.carModel],
+                        ["Yıl", form.year],
+                        ["Fiyat", form.price, "text-[var(--primary)] font-semibold"],
+                      ].map(([label, value, extraClass = ""]) => (
+                        <div key={label} className="flex items-center justify-between gap-3 text-sm">
+                          <span className="text-[var(--muted-foreground)] shrink-0">{label}</span>
+                          <span className={`font-medium text-right truncate ${extraClass}`}>{value}</span>
+                        </div>
+                      ))}
                     </div>
-                  )})}
+                  </div>
+
+                  <div>
+                    <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Uygun platformlar</div>
+                    <div className="flex flex-wrap gap-2">
+                      {(aspectRatio === "9:16" || aspectRatio === "3:4"
+                        ? ["TikTok", "Instagram Reels", "YouTube Shorts"]
+                        : aspectRatio === "1:1"
+                        ? ["Instagram Kare", "LinkedIn", "Web / galeri"]
+                        : aspectRatio === "4:3"
+                        ? ["Facebook", "Web / galeri", "Sunum"]
+                        : ["YouTube (16:9)", "Web / galeri", "LinkedIn"]
+                      ).map((p) => (
+                        <span
+                          key={p}
+                          className="text-[11px] bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)] px-3 py-1.5 rounded-full"
+                        >
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    disabled={isRendering}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-[var(--primary-foreground)] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-[var(--primary)]/25"
+                  >
+                    {isRendering ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        {renderProgress || "Hazırlanıyor…"}
+                      </>
+                    ) : (
+                      <>
+                        <Download className="w-4 h-4" />
+                        Video İndir (.mp4)
+                      </>
+                    )}
+                  </button>
+                  {renderError && (
+                    <p className="text-xs text-[var(--destructive)] leading-snug px-1">{renderError}</p>
+                  )}
+                  {isRendering && (
+                    <p className="text-[10px] text-[var(--muted-foreground)] text-center px-2">
+                      Render sunucuda yapılıyor — lütfen sayfayı kapatmayın.
+                    </p>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={onReset}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium bg-[var(--muted)] hover:bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)] transition-all"
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    Düzenlemeye dön
+                  </button>
                 </div>
               </div>
-            )}
-
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4">
-              <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Araç detayları</div>
-              {[
-                ["Marka", form.carBrand],
-                ["Model", form.carModel],
-                ["Yıl", form.year],
-                ["Fiyat", form.price, "text-[var(--primary)] font-semibold"],
-              ].map(([label, value, extraClass = ""]) => (
-                <div key={label} className="flex justify-between text-sm py-1.5 border-b border-[var(--border)] last:border-0">
-                  <span className="text-[var(--muted-foreground)]">{label}</span>
-                  <span className={`font-medium ${extraClass}`}>{value}</span>
-                </div>
-              ))}
             </div>
-
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4">
-              <div className="text-[10px] text-[var(--muted-foreground)] uppercase tracking-wider mb-3">Uygun platformlar</div>
-              <div className="flex flex-wrap gap-2">
-                {(aspectRatio === "9:16" || aspectRatio === "3:4"
-                  ? ["TikTok", "Instagram Reels", "YouTube Shorts"]
-                  : aspectRatio === "1:1"
-                  ? ["Instagram Kare", "LinkedIn", "Web / galeri"]
-                  : aspectRatio === "4:3"
-                  ? ["Facebook", "Web / galeri", "Sunum"]
-                  : ["YouTube (16:9)", "Web / galeri", "LinkedIn"]
-                ).map((p) => (
-                  <span key={p} className="text-[11px] bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)] px-3 py-1.5 rounded-full">
-                    {p}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* İndir butonu */}
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={handleDownload}
-                disabled={isRendering}
-                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-sm font-semibold bg-[var(--primary)] hover:bg-[var(--primary)]/90 text-[var(--primary-foreground)] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-lg shadow-[var(--primary)]/25"
-              >
-                {isRendering ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {renderProgress || "Hazırlanıyor…"}
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    Video İndir (.mp4)
-                  </>
-                )}
-              </button>
-              {renderError && (
-                <p className="text-xs text-[var(--destructive)] leading-snug px-1">{renderError}</p>
-              )}
-              {isRendering && (
-                <p className="text-[10px] text-[var(--muted-foreground)] text-center px-2">
-                  Render sunucuda yapılıyor — lütfen sayfayı kapatmayın.
-                </p>
-              )}
-            </div>
-
-            <button
-              type="button"
-              onClick={onReset}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-medium bg-[var(--muted)] hover:bg-[var(--muted)] border border-[var(--border)] text-[var(--foreground)] transition-all"
-            >
-              <Wand2 className="w-4 h-4" />
-              Düzenlemeye dön
-            </button>
           </div>
         </div>
       </div>
