@@ -1,7 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextResponse } from "next/server";
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+import { getOpenAI, getOpenAIModelIdentify } from "@/lib/openai";
 
 interface IdentifyRequest {
   photos: { base64: string }[];
@@ -14,26 +13,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Fotoğraf bulunamadı" }, { status: 400 });
     }
 
-    const imageBlocks = photos.slice(0, 5).map((p) => ({
-      type: "image" as const,
-      source: {
-        type: "base64" as const,
-        media_type: "image/jpeg" as const,
-        data: p.base64,
-      },
-    }));
+    const openai = getOpenAI();
+    const model = getOpenAIModelIdentify();
 
-    const response = await client.messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 1400,
-      messages: [
-        {
-          role: "user",
-          content: [
-            ...imageBlocks,
-            {
-              type: "text",
-              text: `Bu araç fotoğraflarını incele ve araç ilan formunu mümkün olduğunca doğru doldur.
+    const instruction = `Bu araç fotoğraflarını incele ve araç ilan formunu mümkün olduğunca doğru doldur.
 
 Öncelik sırası:
 1) Fotoğrafta açıkça görünen bilgi
@@ -94,21 +77,39 @@ Kurallar:
 - plaka: Plaka görünmüyorsa ""
 - ilanTarihi: Tarih görünmüyorsa ""
 
-Sadece JSON döndür, başka metin ekleme.`,
-            },
-          ],
-        },
-      ],
+Yanıtın tek bir JSON nesnesi olmalı; başka metin veya markdown kullanma.`;
+
+    const userContent: OpenAI.Chat.ChatCompletionContentPart[] = [
+      ...photos.slice(0, 5).map(
+        (p): OpenAI.Chat.ChatCompletionContentPart => ({
+          type: "image_url",
+          image_url: { url: `data:image/jpeg;base64,${p.base64}` },
+        }),
+      ),
+      { type: "text", text: instruction },
+    ];
+
+    const completion = await openai.chat.completions.create({
+      model,
+      max_tokens: 1400,
+      temperature: 0,
+      seed: 42,
+      messages: [{ role: "user", content: userContent }],
+      response_format: { type: "json_object" },
     });
 
-    const text =
-      response.content[0].type === "text" ? response.content[0].text : "";
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return NextResponse.json({ error: "Araç tanınamadı" }, { status: 422 });
+    const raw = completion.choices[0]?.message?.content ?? "";
+    let data: unknown;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      const match = raw.match(/\{[\s\S]*\}/);
+      if (!match) {
+        return NextResponse.json({ error: "Araç tanınamadı" }, { status: 422 });
+      }
+      data = JSON.parse(match[0]);
     }
 
-    const data = JSON.parse(match[0]);
     return NextResponse.json(data);
   } catch (err) {
     console.error("[identify]", err);

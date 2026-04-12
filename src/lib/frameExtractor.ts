@@ -59,7 +59,7 @@ function extractSingleFrame(video: HTMLVideoElement, atPercent: number): Promise
 
 /**
  * Videodan 4 eşit aralıklı kare çeker: %10, %33, %60, %85
- * Böylece başlangıç, orta ve son bölümler Claude tarafından görülür.
+ * Böylece başlangıç, orta ve son bölümler analiz aşamasında görülür.
  */
 export async function extractVideoFrames(file: File): Promise<string[]> {
   return new Promise((resolve) => {

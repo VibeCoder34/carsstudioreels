@@ -2,11 +2,16 @@ import {
   isSceneVariant,
   type SceneVariant,
 } from "@/lib/photoCategories";
+import type { LanguageCode } from "@/lib/languages";
 
-/** API / Claude yanıtı (fotoğraf odaklı kurgu) */
+/** API / analyze yanıtı (fotoğraf odaklı kurgu) */
 export interface StoryboardShot {
   source_index: number;
   category_id: string;
+  /**
+   * Kısa kategori etiketi — videoda gösterilir; video dili ile uyumlu olmalı.
+   * (JSON: `category_label` veya geriye dönük `category_label_en`.)
+   */
   category_label_en: string;
   comment_tr: string;
   quality_score: number;
@@ -106,6 +111,41 @@ function shotMax(s: StoryboardShot): number {
   return DATA_VARIANTS.has(s.scene_variant) ? MAX_DATA_FRAMES : MAX_SHOT_FRAMES;
 }
 
+const REPAIR_FALLBACK: Record<LanguageCode, { missingComment: string; photoLabel: string }> = {
+  tr: {
+    missingComment: "AI yanıtı bu fotoğraf için eksikti; otomatik sahne eklendi.",
+    photoLabel: "Fotoğraf",
+  },
+  en: {
+    missingComment: "The AI response was missing for this photo; a default scene was added.",
+    photoLabel: "Photo",
+  },
+  es: {
+    missingComment: "Faltaba la respuesta de la IA para esta foto; se añadió una escena automática.",
+    photoLabel: "Foto",
+  },
+  fr: {
+    missingComment: "Réponse IA manquante pour cette photo ; scène automatique ajoutée.",
+    photoLabel: "Photo",
+  },
+  de: {
+    missingComment: "Keine KI-Antwort für dieses Foto; Standardszene wurde ergänzt.",
+    photoLabel: "Foto",
+  },
+  it: {
+    missingComment: "Risposta IA assente per questa foto; è stata aggiunta una scena automatica.",
+    photoLabel: "Foto",
+  },
+  ru: {
+    missingComment: "Ответ ИИ для этого кадра отсутствует; добавлена сцена по умолчанию.",
+    photoLabel: "Кадр",
+  },
+  pt: {
+    missingComment: "Resposta da IA ausente para esta foto; cena padrão adicionada.",
+    photoLabel: "Foto",
+  },
+};
+
 function dedupeCategoryIds(shots: StoryboardShot[]): void {
   const seen = new Set<string>();
   for (const s of shots) {
@@ -128,7 +168,7 @@ function coerceSceneVariant(raw: string): SceneVariant {
 
 /**
  * Her sahnenin süresini min/max sınırlarına kıstırır.
- * Claude'un atadığı süreyi ASLA aşağı ölçekleme — süre kısıtı yok.
+ * Analiz API'sinin atadığı süreyi ASLA aşağı ölçekleme — süre kısıtı yok.
  * Çok kısa sahne varsa min'e çekeriz, çok uzunsa max'a kıstırırız.
  */
 export function normalizeStoryboardDurations(shots: StoryboardShot[]): void {
@@ -145,7 +185,9 @@ function asShot(s: Record<string, unknown>): StoryboardShot {
   return {
     source_index: Number(s.source_index ?? s.sourceIndex ?? 0),
     category_id: String(s.category_id ?? s.categoryId ?? "other"),
-    category_label_en: String(s.category_label_en ?? s.categoryLabelEn ?? ""),
+    category_label_en: String(
+      s.category_label ?? s.category_label_en ?? s.categoryLabelEn ?? "",
+    ),
     comment_tr: String(s.comment_tr ?? s.commentTr ?? ""),
     quality_score: Number(s.quality_score ?? s.qualityScore ?? 7),
     lighting: String(s.lighting ?? "good"),
@@ -159,16 +201,22 @@ function asShot(s: Record<string, unknown>): StoryboardShot {
  * Eksik sahne, tekrarlayan veya geçersiz source_index durumunda
  * tam olarak photoCount sahneli, tutarlı bir storyboard üretir.
  */
-export function repairStoryboard(shots: StoryboardShot[], photoCount: number): StoryboardShot[] {
+export function repairStoryboard(
+  shots: StoryboardShot[],
+  photoCount: number,
+  videoLanguage: LanguageCode = "tr",
+): StoryboardShot[] {
   const n = photoCount;
   if (n <= 0) return [];
+
+  const fb = REPAIR_FALLBACK[videoLanguage] ?? REPAIR_FALLBACK.tr;
 
   function fallback(i: number): StoryboardShot {
     return {
       source_index: i,
       category_id: `photo_${i + 1}`,
-      category_label_en: `Photo ${i + 1}`,
-      comment_tr: "AI yanıtı bu fotoğraf için eksikti; otomatik sahne eklendi.",
+      category_label_en: `${fb.photoLabel} ${i + 1}`,
+      comment_tr: fb.missingComment,
       quality_score: 7,
       lighting: "average",
       duration_frames: MIN_DATA_FRAMES,
@@ -219,8 +267,10 @@ export function repairStoryboard(shots: StoryboardShot[], photoCount: number): S
 }
 
 export type NormalizeAnalyzeOptions = {
-  /** false ise voiceover alanları silinir (Claude bazen yine döndürebilir). */
+  /** false ise voiceover alanları silinir (model bazen yine döndürebilir). */
   voiceover?: boolean;
+  /** Eksik sahne onarımı ve yedek metinlerin dili */
+  videoLanguage?: LanguageCode;
 };
 
 export function normalizePhotoAnalyzeResult(
@@ -229,6 +279,7 @@ export function normalizePhotoAnalyzeResult(
   options?: NormalizeAnalyzeOptions
 ): PhotoAnalyzeResult {
   const wantVoiceover = options?.voiceover === true;
+  const videoLanguage = options?.videoLanguage ?? "tr";
   const rawList = (raw.storyboard ?? []) as Record<string, unknown>[];
   let storyboard: StoryboardShot[] = rawList.map(asShot).map((s) => ({
     ...s,
@@ -238,7 +289,7 @@ export function normalizePhotoAnalyzeResult(
     category_label_en: s.category_label_en || s.category_id,
     comment_tr: s.comment_tr || "",
   }));
-  storyboard = repairStoryboard(storyboard, photoCount);
+  storyboard = repairStoryboard(storyboard, photoCount, videoLanguage);
   dedupeCategoryIds(storyboard);
   normalizeStoryboardDurations(storyboard);
   if (wantVoiceover) {

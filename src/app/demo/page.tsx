@@ -21,9 +21,8 @@ import {
 } from "@/remotion/PrestigeReels";
 import { imageFileToBase64 } from "@/lib/frameExtractor";
 import {
-  CATEGORY_LABEL_TR,
+  resolveShotCategoryLabel,
   SCENE_VARIANTS,
-  isFixedCategoryId,
   isSceneVariant,
   type SceneVariant,
 } from "@/lib/photoCategories";
@@ -31,7 +30,6 @@ import {
   normalizePhotoAnalyzeResult,
   getFlowRecommendation,
   type PhotoAnalyzeResult,
-  type StoryboardShot,
   type FlowRecommendation,
 } from "@/lib/storyboard";
 import {
@@ -40,6 +38,15 @@ import {
 } from "@/lib/voiceoverPipeline";
 import { LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
 import { MUSIC_TRACKS, resolveMusicTrack, type MusicTrackId } from "@/lib/music";
+import {
+  BODY_OPTIONS,
+  COLOR_OPTIONS,
+  CONDITION_OPTIONS,
+  DRIVETRAIN_OPTIONS,
+  FUEL_OPTIONS,
+  GEARBOX_OPTIONS,
+  YES_NO_OPTIONS,
+} from "@/lib/vehicleFieldOptions";
 
 const Player = dynamic(
   () => import("@remotion/player").then((m) => m.Player),
@@ -86,13 +93,6 @@ interface FormData {
   agirHasarKayitli: string;
   plaka: string;
   ilanTarihi: string;
-}
-
-function categoryTitleTr(shot: StoryboardShot): string {
-  if (isFixedCategoryId(shot.category_id)) {
-    return CATEGORY_LABEL_TR[shot.category_id];
-  }
-  return shot.category_label_en || shot.category_id;
 }
 
 /* ─── Ana sayfa ──────────────────────────────────────────── */
@@ -232,6 +232,28 @@ export default function DemoPage() {
           userNotes: videoNotes,
           voiceover: voiceoverEnabled,
           ...(voiceoverEnabled ? { voiceoverLanguage: videoLanguage } : {}),
+          listing: {
+            carBrand: form.carBrand,
+            carModel: form.carModel,
+            year: form.year,
+            price: form.price,
+            ctaPhone: form.ctaPhone,
+            km: form.km,
+            motor: form.motor,
+            renk: form.renk,
+            vites: form.vites,
+            yakit: form.yakit,
+            kasa: form.kasa,
+            seri: form.seri,
+            aracDurumu: form.aracDurumu,
+            motorGucu: form.motorGucu,
+            motorHacmi: form.motorHacmi,
+            cekis: form.cekis,
+            garanti: form.garanti,
+            agirHasarKayitli: form.agirHasarKayitli,
+            plaka: form.plaka,
+            ilanTarihi: form.ilanTarihi,
+          },
         }),
       });
 
@@ -244,6 +266,7 @@ export default function DemoPage() {
       const raw = await res.json();
       const result = normalizePhotoAnalyzeResult(raw, files.length, {
         voiceover: voiceoverEnabled,
+        videoLanguage,
       });
 
       let ordered: MediaItem[] = result.storyboard.map((shot) => {
@@ -257,7 +280,12 @@ export default function DemoPage() {
           src,
           durationFrames: shot.duration_frames,
           sceneVariant: isSceneVariant(shot.scene_variant) ? shot.scene_variant : undefined,
-          categoryLabelEn: shot.category_label_en || shot.category_id,
+          categoryId: shot.category_id,
+          categoryLabelEn: resolveShotCategoryLabel(
+            videoLanguage,
+            shot.category_id,
+            shot.category_label_en,
+          ),
           voiceoverText: shot.voiceover_text,
         };
       });
@@ -857,6 +885,25 @@ function UploadStep({
 
 const INPUT_CLS = "w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/20 focus:border-[var(--ring)]";
 
+const SELECT_CLS = `${INPUT_CLS} cursor-pointer`;
+
+function enumSelect(
+  value: string,
+  onChange: (v: string) => void,
+  options: readonly string[],
+  emptyLabel: string
+) {
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={SELECT_CLS}>
+      {options.map((opt) => (
+        <option key={opt || "__empty"} value={opt}>
+          {opt || emptyLabel}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function IdentifyStep({
   mediaItems, form, isIdentifying, identifyAttempted, onFormChange, onConfirm, onBack,
 }: {
@@ -968,8 +1015,6 @@ function IdentifyStep({
                   ["km",        "KM",          "0 km"],
                   ["motorGucu", "Motor Gücü",  "150 HP"],
                   ["motorHacmi","Motor Hacmi", "1995 cc"],
-                  ["vites",     "Vites",       "Otomatik"],
-                  ["yakit",     "Yakıt Tipi",  "Benzin"],
                 ] as [keyof FormData, string, string][]
               ).map(([field, label, placeholder]) => (
                 <div key={field}>
@@ -994,6 +1039,18 @@ function IdentifyStep({
                   )}
                 </div>
               ))}
+              <div>
+                <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Vites</label>
+                {enumSelect(form.vites, (v) => onFormChange("vites", v), GEARBOX_OPTIONS, "— Seçin —")}
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Yakıt tipi</label>
+                {enumSelect(form.yakit, (v) => onFormChange("yakit", v), FUEL_OPTIONS, "— Seçin —")}
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Çekiş</label>
+                {enumSelect(form.cekis, (v) => onFormChange("cekis", v), DRIVETRAIN_OPTIONS, "— Seçin —")}
+              </div>
             </div>
           </div>
 
@@ -1009,29 +1066,53 @@ function IdentifyStep({
             </button>
             {detailsOpen && (
               <div className="mt-3 grid grid-cols-2 gap-3">
-                {(
-                  [
-                    ["kasa",             "Kasa Tipi",       "Sedan"],
-                    ["renk",             "Renk",            "Siyah"],
-                    ["cekis",            "Çekiş",           "Önden Çekiş"],
-                    ["motor",            "Motor",           "2.0L Benzin"],
-                    ["aracDurumu",       "Araç Durumu",     "İkinci El"],
-                    ["garanti",          "Garanti",         "Hayır"],
-                    ["agirHasarKayitli", "Ağır Hasar",      "Hayır"],
-                    ["plaka",            "Plaka / Uyruk",   "TR Plakalı"],
-                    ["ilanTarihi",       "İlan Tarihi",     ""],
-                  ] as [keyof FormData, string, string][]
-                ).map(([field, label, placeholder]) => (
-                  <div key={field}>
-                    <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">{label}</label>
-                    <input
-                      value={form[field]}
-                      onChange={(e) => onFormChange(field, e.target.value)}
-                      placeholder={placeholder}
-                      className={INPUT_CLS}
-                    />
-                  </div>
-                ))}
+                <div>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Kasa tipi</label>
+                  {enumSelect(form.kasa, (v) => onFormChange("kasa", v), BODY_OPTIONS, "— Seçin —")}
+                </div>
+                <div>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Renk</label>
+                  {enumSelect(form.renk, (v) => onFormChange("renk", v), COLOR_OPTIONS, "— Seçin —")}
+                </div>
+                <div>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Motor</label>
+                  <input
+                    value={form.motor}
+                    onChange={(e) => onFormChange("motor", e.target.value)}
+                    placeholder="2.0L Benzin"
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Araç durumu</label>
+                  {enumSelect(form.aracDurumu, (v) => onFormChange("aracDurumu", v), CONDITION_OPTIONS, "— Seçin —")}
+                </div>
+                <div>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Garanti</label>
+                  {enumSelect(form.garanti, (v) => onFormChange("garanti", v), YES_NO_OPTIONS, "— Seçin —")}
+                </div>
+                <div>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Ağır hasar kaydı</label>
+                  {enumSelect(form.agirHasarKayitli, (v) => onFormChange("agirHasarKayitli", v), YES_NO_OPTIONS, "— Seçin —")}
+                </div>
+                <div>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">Plaka / uyruk</label>
+                  <input
+                    value={form.plaka}
+                    onChange={(e) => onFormChange("plaka", e.target.value)}
+                    placeholder="TR plakalı"
+                    className={INPUT_CLS}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">İlan tarihi</label>
+                  <input
+                    value={form.ilanTarihi}
+                    onChange={(e) => onFormChange("ilanTarihi", e.target.value)}
+                    placeholder=""
+                    className={INPUT_CLS}
+                  />
+                </div>
                 <div className="col-span-2">
                   <label className="block text-xs text-[var(--muted-foreground)] mb-1.5">
                     <Phone className="w-3 h-3 inline mr-1" />

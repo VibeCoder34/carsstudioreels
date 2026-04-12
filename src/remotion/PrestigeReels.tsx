@@ -11,6 +11,9 @@ import {
 } from "remotion";
 import type { SceneVariant } from "@/lib/photoCategories";
 import type { LanguageCode } from "@/lib/languages";
+import { translateEnumValue, translateListingValuesForVideo, translateYesNo } from "@/lib/vehicleEnumI18n";
+import { buildOutroGridRowsOnly, type ListingPayload } from "@/lib/listingPayload";
+import { getSpecTableData, type SpecCategory, type SpecRow } from "@/lib/specTableI18n";
 
 /* ─── Tipler ─────────────────────────────────────────────── */
 
@@ -24,10 +27,12 @@ export type MediaItem = {
    */
   inFrame?: number;
   outFrame?: number;
-  /** Claude storyboard — sahne animasyonu */
+  /** Storyboard (analyze API) — sahne animasyonu */
   sceneVariant?: SceneVariant;
-  /** İngilizce kısa etiket (rozet / split band) */
+  /** Kısa kategori etiketi (video dili; prop adı tarihî) */
   categoryLabelEn?: string;
+  /** Sabit veya snake_case kategori id — spec tablosu eşlemesi için */
+  categoryId?: string;
   /** ElevenLabs TTS — sahne ile senkron (blob veya URL) */
   audioSrc?: string;
   /** Gösterim / debug — seslendirme metni */
@@ -121,6 +126,18 @@ const VIDEO_I18N: Record<
     modelYear: string;
     vehicleCondition: string;
     salePrice: string;
+    /** Kısa üst etiketler (letter_box, ticker) */
+    uiBrand: string;
+    uiModel: string;
+    uiYear: string;
+    listingDate: string;
+    listingWarranty: string;
+    listingHeavyDamage: string;
+    listingPlate: string;
+    specSheetTitle: string;
+    hudCondition: string;
+    hudPower: string;
+    hudVolume: string;
     labels: {
       km: string;
       gearbox: string;
@@ -131,6 +148,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: string;
       drivetrain: string;
       color: string;
+      torque: string;
+      acceleration: string;
     };
   }
 > = {
@@ -141,6 +160,17 @@ const VIDEO_I18N: Record<
     modelYear: "Model Yılı",
     vehicleCondition: "Araç Durumu",
     salePrice: "Satış Fiyatı",
+    uiBrand: "MARKA",
+    uiModel: "MODEL",
+    uiYear: "YIL",
+    listingDate: "İLAN TARİHİ",
+    listingWarranty: "GARANTİ",
+    listingHeavyDamage: "AĞIR HASAR KAYITLI",
+    listingPlate: "PLAKA / UYRUK",
+    specSheetTitle: "ARAÇ TEKNİK BİLGİLERİ",
+    hudCondition: "DURUM",
+    hudPower: "GÜÇ",
+    hudVolume: "HACİM",
     labels: {
       km: "KM",
       gearbox: "VİTES",
@@ -151,6 +181,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: "MOTOR HACMİ",
       drivetrain: "ÇEKİŞ",
       color: "RENK",
+      torque: "TORK",
+      acceleration: "0–100 km/s",
     },
   },
   en: {
@@ -160,6 +192,17 @@ const VIDEO_I18N: Record<
     modelYear: "Model Year",
     vehicleCondition: "Condition",
     salePrice: "Sale Price",
+    uiBrand: "MAKE",
+    uiModel: "MODEL",
+    uiYear: "YEAR",
+    listingDate: "LISTING DATE",
+    listingWarranty: "WARRANTY",
+    listingHeavyDamage: "ACCIDENT RECORD",
+    listingPlate: "PLATE / REG.",
+    specSheetTitle: "VEHICLE SPECIFICATIONS",
+    hudCondition: "COND.",
+    hudPower: "POWER",
+    hudVolume: "DISP.",
     labels: {
       km: "KM",
       gearbox: "GEARBOX",
@@ -170,6 +213,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: "DISPLACEMENT",
       drivetrain: "DRIVETRAIN",
       color: "COLOR",
+      torque: "TORQUE",
+      acceleration: "0–100 km/h",
     },
   },
   es: {
@@ -179,6 +224,17 @@ const VIDEO_I18N: Record<
     modelYear: "Año modelo",
     vehicleCondition: "Estado",
     salePrice: "Precio",
+    uiBrand: "MARCA",
+    uiModel: "MODELO",
+    uiYear: "AÑO",
+    listingDate: "FECHA DEL ANUNCIO",
+    listingWarranty: "GARANTÍA",
+    listingHeavyDamage: "SINIESTRO GRAVE",
+    listingPlate: "MATRÍCULA",
+    specSheetTitle: "ESPECIFICACIONES",
+    hudCondition: "ESTADO",
+    hudPower: "POT.",
+    hudVolume: "CIL.",
     labels: {
       km: "KM",
       gearbox: "CAJA",
@@ -189,6 +245,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: "CILINDRADA",
       drivetrain: "TRACCIÓN",
       color: "COLOR",
+      torque: "PAR",
+      acceleration: "0–100 km/h",
     },
   },
   fr: {
@@ -198,6 +256,17 @@ const VIDEO_I18N: Record<
     modelYear: "Année-modèle",
     vehicleCondition: "État",
     salePrice: "Prix",
+    uiBrand: "MARQUE",
+    uiModel: "MODÈLE",
+    uiYear: "ANNÉE",
+    listingDate: "DATE DE L’ANNONCE",
+    listingWarranty: "GARANTIE",
+    listingHeavyDamage: "SINISTRE LOURD",
+    listingPlate: "PLAQUE",
+    specSheetTitle: "FICHES TECHNIQUES",
+    hudCondition: "ÉTAT",
+    hudPower: "PUISS.",
+    hudVolume: "CYL.",
     labels: {
       km: "KM",
       gearbox: "BOÎTE",
@@ -208,6 +277,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: "CYLINDRÉE",
       drivetrain: "TRANSMISSION",
       color: "COULEUR",
+      torque: "COUPLE",
+      acceleration: "0–100 km/h",
     },
   },
   de: {
@@ -217,6 +288,17 @@ const VIDEO_I18N: Record<
     modelYear: "Modelljahr",
     vehicleCondition: "Zustand",
     salePrice: "Preis",
+    uiBrand: "MARKE",
+    uiModel: "MODELL",
+    uiYear: "JAHR",
+    listingDate: "ANZEIGEDATUM",
+    listingWarranty: "GARANTIE",
+    listingHeavyDamage: "SCHWERER SCHADEN",
+    listingPlate: "KENNZEICHEN",
+    specSheetTitle: "TECHNISCHE DATEN",
+    hudCondition: "ZUST.",
+    hudPower: "LEIST.",
+    hudVolume: "HUBR.",
     labels: {
       km: "KM",
       gearbox: "GETRIEBE",
@@ -227,6 +309,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: "HUBRAUM",
       drivetrain: "ANTRIEB",
       color: "FARBE",
+      torque: "DREHMOMENT",
+      acceleration: "0–100 km/h",
     },
   },
   it: {
@@ -236,6 +320,17 @@ const VIDEO_I18N: Record<
     modelYear: "Anno modello",
     vehicleCondition: "Condizioni",
     salePrice: "Prezzo",
+    uiBrand: "MARCA",
+    uiModel: "MODELLO",
+    uiYear: "ANNO",
+    listingDate: "DATA ANNUNCIO",
+    listingWarranty: "GARANZIA",
+    listingHeavyDamage: "DANNO GRAVE",
+    listingPlate: "TARGA",
+    specSheetTitle: "SCHEDA TECNICA",
+    hudCondition: "STATO",
+    hudPower: "POT.",
+    hudVolume: "CIL.",
     labels: {
       km: "KM",
       gearbox: "CAMBIO",
@@ -246,6 +341,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: "CILINDRATA",
       drivetrain: "TRAZIONE",
       color: "COLORE",
+      torque: "COPPIA",
+      acceleration: "0–100 km/h",
     },
   },
   ru: {
@@ -255,6 +352,17 @@ const VIDEO_I18N: Record<
     modelYear: "Год выпуска",
     vehicleCondition: "Состояние",
     salePrice: "Цена",
+    uiBrand: "МАРКА",
+    uiModel: "МОДЕЛЬ",
+    uiYear: "ГОД",
+    listingDate: "ДАТА ОБЪЯВЛЕНИЯ",
+    listingWarranty: "ГАРАНТИЯ",
+    listingHeavyDamage: "ТЯЖЁЛОЕ ДТП",
+    listingPlate: "НОМЕР",
+    specSheetTitle: "ТЕХНИЧЕСКИЕ ХАРАКТЕРИСТИКИ",
+    hudCondition: "СОСТ.",
+    hudPower: "МОЩН.",
+    hudVolume: "ОБЪЁМ",
     labels: {
       km: "KM",
       gearbox: "КОРОБКА",
@@ -265,6 +373,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: "ОБЪЁМ",
       drivetrain: "ПРИВОД",
       color: "ЦВЕТ",
+      torque: "МОМЕНТ",
+      acceleration: "0–100 км/ч",
     },
   },
   pt: {
@@ -274,6 +384,17 @@ const VIDEO_I18N: Record<
     modelYear: "Ano-modelo",
     vehicleCondition: "Condição",
     salePrice: "Preço",
+    uiBrand: "MARCA",
+    uiModel: "MODELO",
+    uiYear: "ANO",
+    listingDate: "DATA DO ANÚNCIO",
+    listingWarranty: "GARANTIA",
+    listingHeavyDamage: "SINISTRO GRAVE",
+    listingPlate: "MATRÍCULA",
+    specSheetTitle: "FICHA TÉCNICA",
+    hudCondition: "ESTADO",
+    hudPower: "POT.",
+    hudVolume: "CIL.",
     labels: {
       km: "KM",
       gearbox: "CÂMBIO",
@@ -284,6 +405,8 @@ const VIDEO_I18N: Record<
       engineDisplacement: "CILINDRADA",
       drivetrain: "TRAÇÃO",
       color: "COR",
+      torque: "TORQUE",
+      acceleration: "0–100 km/h",
     },
   },
 };
@@ -295,87 +418,6 @@ function vtxt(lang: VideoLanguage, key: keyof (typeof VIDEO_I18N)["tr"]) {
 const LABEL_SHADOW = "0 2px 10px rgba(0,0,0,0.65)";
 const LABEL_COLOR = "rgba(255,255,255,0.78)";
 const LABEL_COLOR_SOFT = "rgba(255,255,255,0.70)";
-
-function normKey(s: string): string {
-  return s
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .replace(/ı/g, "i")
-    .replace(/İ/g, "i")
-    .replace(/ş/g, "s")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c");
-}
-
-function translateEnumValue(lang: VideoLanguage, kind: "gearbox" | "fuel" | "drivetrain" | "body" | "condition" | "color", value?: string): string | undefined {
-  const v = value?.trim();
-  if (!v) return value;
-  if (lang === "tr") return value;
-
-  const k = normKey(v);
-
-  const map = (dict: Record<string, Partial<Record<VideoLanguage, string>>>): string | undefined =>
-    dict[k]?.[lang] ?? undefined;
-
-  const gearbox = map({
-    manuel: { en: "Manual", es: "Manual", fr: "Manuelle", de: "Schaltgetriebe", it: "Manuale", ru: "Механика", pt: "Manual" },
-    otomatik: { en: "Automatic", es: "Automático", fr: "Automatique", de: "Automatik", it: "Automatico", ru: "Автомат", pt: "Automático" },
-    "yari otomatik": { en: "Semi-automatic", es: "Semiautomático", fr: "Semi-automatique", de: "Halbautomatik", it: "Semiautomatico", ru: "Робот", pt: "Semiautomático" },
-  });
-
-  const fuel = map({
-    benzin: { en: "Petrol", es: "Gasolina", fr: "Essence", de: "Benzin", it: "Benzina", ru: "Бензин", pt: "Gasolina" },
-    dizel: { en: "Diesel", es: "Diésel", fr: "Diesel", de: "Diesel", it: "Diesel", ru: "Дизель", pt: "Diesel" },
-    lpg: { en: "LPG", es: "GLP", fr: "GPL", de: "LPG", it: "GPL", ru: "ГБО", pt: "GLP" },
-    "benzin & lpg": { en: "Petrol & LPG", es: "Gasolina y GLP", fr: "Essence & GPL", de: "Benzin & LPG", it: "Benzina & GPL", ru: "Бензин + ГБО", pt: "Gasolina & GLP" },
-    elektrik: { en: "Electric", es: "Eléctrico", fr: "Électrique", de: "Elektro", it: "Elettrico", ru: "Электро", pt: "Elétrico" },
-    hibrit: { en: "Hybrid", es: "Híbrido", fr: "Hybride", de: "Hybrid", it: "Ibrido", ru: "Гибрид", pt: "Híbrido" },
-  });
-
-  const drivetrain = map({
-    "onden cekis": { en: "FWD", es: "Tracción delantera", fr: "Traction avant", de: "Frontantrieb", it: "Trazione anteriore", ru: "Передний привод", pt: "Tração dianteira" },
-    "arkadan itis": { en: "RWD", es: "Tracción trasera", fr: "Propulsion", de: "Heckantrieb", it: "Trazione posteriore", ru: "Задний привод", pt: "Tração traseira" },
-    "4x4": { en: "4x4", es: "4x4", fr: "4x4", de: "4x4", it: "4x4", ru: "4x4", pt: "4x4" },
-    awd: { en: "AWD", es: "AWD", fr: "AWD", de: "AWD", it: "AWD", ru: "AWD", pt: "AWD" },
-  });
-
-  const condition = map({
-    "ikinci el": { en: "Used", es: "De segunda mano", fr: "Occasion", de: "Gebraucht", it: "Usato", ru: "С пробегом", pt: "Usado" },
-    sifir: { en: "New", es: "Nuevo", fr: "Neuf", de: "Neu", it: "Nuovo", ru: "Новый", pt: "Novo" },
-  });
-
-  const body = map({
-    sedan: { en: "Sedan", es: "Sedán", fr: "Berline", de: "Limousine", it: "Berlina", ru: "Седан", pt: "Sedã" },
-    hatchback: { en: "Hatchback", es: "Hatchback", fr: "Compacte", de: "Kompakt", it: "Hatchback", ru: "Хэтчбек", pt: "Hatchback" },
-    suv: { en: "SUV", es: "SUV", fr: "SUV", de: "SUV", it: "SUV", ru: "SUV", pt: "SUV" },
-    coupe: { en: "Coupe", es: "Coupé", fr: "Coupé", de: "Coupé", it: "Coupé", ru: "Купе", pt: "Coupé" },
-    cabrio: { en: "Convertible", es: "Cabrio", fr: "Cabriolet", de: "Cabrio", it: "Cabrio", ru: "Кабриолет", pt: "Conversível" },
-    "station wagon": { en: "Wagon", es: "Familiar", fr: "Break", de: "Kombi", it: "Station wagon", ru: "Универсал", pt: "Perua" },
-  });
-
-  const color = map({
-    siyah: { en: "Black", es: "Negro", fr: "Noir", de: "Schwarz", it: "Nero", ru: "Чёрный", pt: "Preto" },
-    beyaz: { en: "White", es: "Blanco", fr: "Blanc", de: "Weiß", it: "Bianco", ru: "Белый", pt: "Branco" },
-    gri: { en: "Grey", es: "Gris", fr: "Gris", de: "Grau", it: "Grigio", ru: "Серый", pt: "Cinza" },
-    gumus: { en: "Silver", es: "Plateado", fr: "Argent", de: "Silber", it: "Argento", ru: "Серебристый", pt: "Prata" },
-    kirmizi: { en: "Red", es: "Rojo", fr: "Rouge", de: "Rot", it: "Rosso", ru: "Красный", pt: "Vermelho" },
-    mavi: { en: "Blue", es: "Azul", fr: "Bleu", de: "Blau", it: "Blu", ru: "Синий", pt: "Azul" },
-  });
-
-  const out =
-    kind === "gearbox" ? gearbox :
-    kind === "fuel" ? fuel :
-    kind === "drivetrain" ? drivetrain :
-    kind === "condition" ? condition :
-    kind === "body" ? body :
-    kind === "color" ? color :
-    undefined;
-
-  return out ?? value;
-}
 
 /* ─── Yardımcı fonksiyonlar ──────────────────────────────── */
 
@@ -559,6 +601,7 @@ function FloatingSpecCard({
   carModel,
   year,
   price,
+  videoLanguage,
 }: {
   localFrame: number;
   ilanTarihi?: string;
@@ -571,25 +614,32 @@ function FloatingSpecCard({
   carModel: string;
   year: string;
   price: string;
+  videoLanguage: VideoLanguage;
 }) {
+  const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
   const slideX = interpolate(localFrame, [12, 38], [80, 0], { extrapolateRight: "clamp" });
   const cardOpacity = interpolate(localFrame, [12, 38], [0, 1], { extrapolateRight: "clamp" });
+
+  const aracDurumuDisp = aracDurumu ? translateEnumValue(videoLanguage, "condition", aracDurumu) ?? aracDurumu : undefined;
+  const renkDisp = renk ? translateEnumValue(videoLanguage, "color", renk) ?? renk : undefined;
+  const garantiDisp = garanti ? translateYesNo(videoLanguage, garanti) ?? garanti : undefined;
+  const agirDisp = agirHasarKayitli ? translateYesNo(videoLanguage, agirHasarKayitli) ?? agirHasarKayitli : undefined;
 
   // İlan meta bilgileri — farklı veri noktaları, ticari veri değil
   const rows = (ilanTarihi || aracDurumu || garanti != null || agirHasarKayitli != null)
     ? [
-        ilanTarihi        ? { label: "İLAN TARİHİ",       value: ilanTarihi,           highlight: false } : null,
-        aracDurumu        ? { label: "ARAÇ DURUMU",        value: aracDurumu,           highlight: false } : null,
-        garanti           ? { label: "GARANTİ",            value: garanti,              highlight: false } : null,
-        agirHasarKayitli  ? { label: "AĞIR HASAR KAYITLI", value: agirHasarKayitli,     highlight: false } : null,
-        plaka             ? { label: "PLAKA / UYRUK",      value: plaka,                highlight: false } : null,
-        renk              ? { label: "RENK",               value: renk,                 highlight: false } : null,
+        ilanTarihi        ? { label: T.listingDate,         value: ilanTarihi,           highlight: false } : null,
+        aracDurumu        ? { label: T.vehicleCondition,    value: aracDurumuDisp!,     highlight: false } : null,
+        garanti           ? { label: T.listingWarranty,     value: garantiDisp!,        highlight: false } : null,
+        agirHasarKayitli  ? { label: T.listingHeavyDamage,  value: agirDisp!,            highlight: false } : null,
+        plaka             ? { label: T.listingPlate,        value: plaka,                highlight: false } : null,
+        renk              ? { label: T.labels.color,        value: renkDisp!,            highlight: false } : null,
       ].filter(Boolean) as { label: string; value: string; highlight: boolean }[]
     : [
-        { label: "MARKA", value: carBrand, highlight: false },
-        { label: "MODEL", value: carModel, highlight: false },
-        { label: "YIL",   value: year,     highlight: false },
-        { label: "FİYAT", value: price,    highlight: true  },
+        { label: T.uiBrand, value: carBrand, highlight: false },
+        { label: T.uiModel, value: carModel, highlight: false },
+        { label: T.uiYear,  value: year,     highlight: false },
+        { label: T.labels.price, value: price,    highlight: true  },
       ];
 
   return (
@@ -625,8 +675,8 @@ function FloatingSpecCard({
             <div
               style={{
                 fontFamily: "sans-serif",
-                fontSize: 10,
-                letterSpacing: "0.14em",
+                fontSize: 14,
+                letterSpacing: "0.12em",
                 color: "rgba(255,255,255,0.36)",
                 textTransform: "uppercase",
                 marginBottom: 3,
@@ -738,77 +788,33 @@ function CalloutAnnotation({ localFrame, label }: { localFrame: number; label: s
   );
 }
 
-/* ─── Spec table overlay (spec_table varyantı) ──────────── */
+/* ─── Spec table overlay (spec_table varyantı) — veri: `specTableI18n` ─ */
 
-type SpecCategory = "engine" | "cockpit" | "wheel" | "dimensions";
-
-interface SpecRow {
-  label: string;
-  value: string;
-  barPct?: number; // 0–1 arası → animasyonlu bar render eder
-}
-
-const SPEC_DATA: Record<SpecCategory, { title: string; rows: SpecRow[] }> = {
-  engine: {
-    title: "MOTOR PERFORMANSI",
-    rows: [
-      { label: "Motor",        value: "2.0L TwinPower Turbo" },
-      { label: "Güç",          value: "190 HP",      barPct: 0.72 },
-      { label: "Tork",         value: "400 Nm",      barPct: 0.80 },
-      { label: "0–100 km/s",   value: "7.2 sn",      barPct: 0.56 },
-      { label: "Azami Hız",    value: "235 km/h",    barPct: 0.78 },
-    ],
-  },
-  cockpit: {
-    title: "İÇ MEKAN ÖZELLİKLERİ",
-    rows: [
-      { label: "Panoramik Cam Tavan",              value: "✓" },
-      { label: "Isıtmalı & Havalandırmalı Koltuk", value: "✓" },
-      { label: "12.3\" Dijital Gösterge Paneli",   value: "✓" },
-      { label: "Harman Kardon Ses Sistemi",         value: "✓" },
-      { label: "Ambient Aydınlatma (16 Renk)",      value: "✓" },
-      { label: "Kablosuz Şarj",                    value: "✓" },
-    ],
-  },
-  wheel: {
-    title: "JANT & FREN SİSTEMİ",
-    rows: [
-      { label: "Lastik Ölçüsü",   value: "245/45 R19" },
-      { label: "Jant",            value: "19\" Çift Kollu" },
-      { label: "Ön Fren Çapı",    value: "348 mm",  barPct: 0.82 },
-      { label: "Arka Fren Çapı",  value: "300 mm",  barPct: 0.70 },
-      { label: "Fren Tipi",       value: "Ventilasyonlu Disk" },
-    ],
-  },
-  dimensions: {
-    title: "BOYUTLAR & HACİM",
-    rows: [
-      { label: "Uzunluk",         value: "4.963 mm", barPct: 0.82 },
-      { label: "Genişlik",        value: "1.868 mm", barPct: 0.68 },
-      { label: "Yükseklik",       value: "1.467 mm", barPct: 0.55 },
-      { label: "Dingil Mesafesi", value: "2.975 mm", barPct: 0.75 },
-      { label: "Bagaj Hacmi",     value: "520 L",    barPct: 0.60 },
-    ],
-  },
-};
-
-function detectSpecCategory(categoryLabelEn: string): SpecCategory {
-  const l = categoryLabelEn.toLowerCase();
-  if (l.includes("engine") || l.includes("motor") || l.includes("hood") || l.includes("bonnet")) return "engine";
-  if (l.includes("cockpit") || l.includes("interior") || l.includes("cabin") || l.includes("dashboard") || l.includes("seat") || l.includes("steering")) return "cockpit";
-  if (l.includes("tire") || l.includes("wheel") || l.includes("rim") || l.includes("brake") || l.includes("tyre")) return "wheel";
+function detectSpecCategory(categoryId: string | undefined, categoryLabel: string): SpecCategory {
+  const id = (categoryId ?? "").toLowerCase().replace(/\s+/g, "_");
+  if (id === "cockpit" || id.includes("interior") || id.includes("dashboard")) return "cockpit";
+  if (id === "tire" || id.includes("wheel") || id.includes("tyre") || id.includes("brake")) return "wheel";
+  if (id.includes("engine") || id.includes("motor") || id.includes("hood") || id.includes("bonnet")) return "engine";
+  const l = categoryLabel.toLowerCase();
+  if (/motor|moteur|двигатель|engine|hood|bonnet|cap[oó]/.test(l)) return "engine";
+  if (/cockpit|interior|habitacle|innen|intérieur|салон|abitacolo/.test(l)) return "cockpit";
+  if (/tire|wheel|llanta|roue|reifen|pneu|шин|jante|cerchi|rodas|rin|llantas/.test(l)) return "wheel";
   return "dimensions";
 }
 
 function SpecTableOverlay({
   localFrame,
+  categoryId,
   categoryLabelEn,
+  videoLanguage,
 }: {
   localFrame: number;
+  categoryId?: string;
   categoryLabelEn: string;
+  videoLanguage: VideoLanguage;
 }) {
-  const category = detectSpecCategory(categoryLabelEn);
-  const { title, rows } = SPEC_DATA[category];
+  const category = detectSpecCategory(categoryId, categoryLabelEn);
+  const { title, rows } = getSpecTableData(videoLanguage)[category];
   const isChecklist = category === "cockpit";
 
   const panelY = interpolate(localFrame, [0, 24], [280, 0], {
@@ -872,9 +878,9 @@ function SpecTableOverlay({
           <span
             style={{
               fontFamily: "sans-serif",
-              fontSize: 12,
+              fontSize: 16,
               fontWeight: 700,
-              letterSpacing: "0.20em",
+              letterSpacing: "0.17em",
               color: "rgba(255,255,255,0.72)",
               textTransform: "uppercase",
             }}
@@ -931,7 +937,7 @@ function SpecTableOverlay({
                   <span
                     style={{
                       fontFamily: "sans-serif",
-                      fontSize: 13,
+                      fontSize: 16,
                       fontWeight: 400,
                       color: "rgba(255,255,255,0.80)",
                       letterSpacing: "0.02em",
@@ -969,10 +975,10 @@ function SpecTableOverlay({
                 <span
                   style={{
                     fontFamily: "sans-serif",
-                    fontSize: 11,
+                    fontSize: 15,
                     fontWeight: 600,
                     color: "rgba(255,255,255,0.60)",
-                    letterSpacing: "0.10em",
+                    letterSpacing: "0.09em",
                     textTransform: "uppercase",
                     width: 148,
                     flexShrink: 0,
@@ -1105,16 +1111,18 @@ function MediaSlide({
   // We intentionally scale small labels more aggressively than big headings.
   const format = aspectRatio ?? "16:9";
   const smallScale =
-    format === "9:16" ? 1.55
-    : format === "3:4" ? 1.40
-    : format === "1:1" ? 1.30
-    : 1.0;
+    format === "9:16" ? 1.62
+    : format === "3:4" ? 1.46
+    : format === "1:1" ? 1.36
+    : 1.16;
   const midScale =
     format === "9:16" ? 1.18
     : format === "3:4" ? 1.12
     : format === "1:1" ? 1.08
     : 1.0;
   const fsSmall = (n: number) => Math.round(n * smallScale);
+  /** Uppercase başlıklar, kategori rozetleri, spec etiketleri — fsSmall’dan bir kademe büyük */
+  const fsHeading = (n: number) => Math.round(n * smallScale * 1.22);
   const fsMid = (n: number) => Math.round(n * midScale);
 
   const frame = useCurrentFrame();
@@ -1259,6 +1267,7 @@ function MediaSlide({
   };
 
   const cat = item.categoryLabelEn?.trim();
+  const categoryId = item.categoryId?.trim();
   const washPulse =
     sceneVariant === "color_wash"
       ? 0.12 + 0.1 * Math.sin((localFrame / Math.max(12, duration * 0.08)) * Math.PI * 2)
@@ -1390,8 +1399,8 @@ function MediaSlide({
                 <div
                   style={{
                     fontFamily: "sans-serif",
-                    fontSize: fsSmall(11),
-                    letterSpacing: "0.16em",
+                    fontSize: fsHeading(13),
+                    letterSpacing: "0.14em",
                     color: "rgba(255,255,255,0.62)",
                     textTransform: "uppercase",
                     marginBottom: 8,
@@ -1434,8 +1443,8 @@ function MediaSlide({
 
   // ─── side_table: Sol foto + sağ kategori tablosu ─────────
   if (sceneVariant === "side_table") {
-    const category = detectSpecCategory(cat ?? "exterior");
-    const { title, rows } = SPEC_DATA[category];
+    const category = detectSpecCategory(categoryId, cat ?? "exterior");
+    const { title, rows } = getSpecTableData(videoLanguage)[category];
     const isChecklist = category === "cockpit";
 
     const lineW    = interpolate(localFrame, [6, 26], [0, 48], { extrapolateRight: "clamp" });
@@ -1474,7 +1483,7 @@ function MediaSlide({
           <div style={{ width: lineW, height: 2, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.12))", marginBottom: 22 }} />
           <div style={{ opacity: titleOp, transform: `translateX(${titleX}px)`, display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
             <div style={{ width: 3, height: 22, background: "#f8c96a", borderRadius: 2, boxShadow: "0 0 14px rgba(248,201,106,0.6)" }} />
-            <span style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.20em", color: "rgba(255,255,255,0.70)", textTransform: "uppercase" }}>
+            <span style={{ fontFamily: "sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.70)", textTransform: "uppercase" }}>
               {title}
             </span>
           </div>
@@ -1516,7 +1525,7 @@ function MediaSlide({
                     paddingTop: 13, paddingBottom: 13,
                     borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
                   }}>
-                    <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.14em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", marginBottom: 8 }}>
+                    <div style={{ fontFamily: "sans-serif", fontSize: 14, letterSpacing: "0.12em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", marginBottom: 8 }}>
                       {row.label}
                     </div>
                     {row.barPct !== undefined ? (
@@ -1558,9 +1567,9 @@ function MediaSlide({
         ].filter(Boolean) as SpecRow[]
       : null;
 
-    const category = detectSpecCategory(cat ?? "exterior");
-    const fallback = SPEC_DATA[category];
-    const title = realEngineRows ? "ARAÇ TEKNİK BİLGİLERİ" : fallback.title;
+    const category = detectSpecCategory(categoryId, cat ?? "exterior");
+    const fallback = getSpecTableData(videoLanguage)[category];
+    const title = realEngineRows ? T.specSheetTitle : fallback.title;
     const rows  = realEngineRows ?? fallback.rows;
     const isChecklist = !realEngineRows && category === "cockpit";
 
@@ -1596,7 +1605,7 @@ function MediaSlide({
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: "55%", display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 72px 0 44px" }}>
           <div style={{ width: lineW, height: 2, background: "#f8c96a", borderRadius: 1, marginBottom: 24, boxShadow: "0 0 14px rgba(248,201,106,0.55)" }} />
           <div style={{ opacity: titleOp, transform: `translateX(${titleX}px)`, marginBottom: 32 }}>
-            <span style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.22em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>{title}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: 16, letterSpacing: "0.16em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>{title}</span>
           </div>
 
           {isChecklist ? (
@@ -1627,7 +1636,7 @@ function MediaSlide({
                   : 0;
                 return (
                   <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, paddingTop: 12, paddingBottom: 12, borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}>
-                    <div style={{ fontFamily: "sans-serif", fontSize: 10, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 8 }}>{row.label}</div>
+                    <div style={{ fontFamily: "sans-serif", fontSize: 15, letterSpacing: "0.11em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 8 }}>{row.label}</div>
                     {row.barPct !== undefined ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                         <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
@@ -1650,14 +1659,15 @@ function MediaSlide({
 
   // ─── letter_box: Sinemaskop çerçeve + markalı barlar ──────
   if (sceneVariant === "letter_box") {
+    const Tlb = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
     const barEnter = interpolate(localFrame, [0, 24], [72, 0], { extrapolateRight: "clamp", easing: easeOut });
     const barOp    = interpolate(localFrame, [0, 18], [0, 1], { extrapolateRight: "clamp" });
 
     const bottomStats = [
-      { label: "MARKA",  value: carBrand },
-      { label: "MODEL",  value: carModel },
-      { label: "YIL",    value: year     },
-      { label: "FİYAT",  value: price    },
+      { label: Tlb.uiBrand,  value: carBrand },
+      { label: Tlb.uiModel,  value: carModel },
+      { label: Tlb.uiYear,   value: year     },
+      { label: Tlb.labels.price,  value: price    },
     ];
 
     return (
@@ -1677,11 +1687,11 @@ function MediaSlide({
           padding: "0 88px",
           borderBottom: "1px solid rgba(255,255,255,0.05)",
         }}>
-          <span style={{ fontFamily: "sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: "0.22em", color: "#f8c96a", textTransform: "uppercase" }}>
+          <span style={{ fontFamily: "sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>
             {cat ?? carBrand}
           </span>
           <div style={{ marginLeft: 28, flex: 1, height: 1, background: "linear-gradient(to right, rgba(248,201,106,0.28), transparent)" }} />
-          <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 500, letterSpacing: "0.14em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", textShadow: LABEL_SHADOW }}>
+          <span style={{ fontFamily: "sans-serif", fontSize: 17, fontWeight: 500, letterSpacing: "0.12em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", textShadow: LABEL_SHADOW }}>
             {carBrand} · {year}
           </span>
         </div>
@@ -1704,7 +1714,7 @@ function MediaSlide({
               <div key={si} style={{ display: "flex", alignItems: "center" }}>
                 {si > 0 && <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.08)", margin: "0 40px" }} />}
                 <div style={{ opacity: sOp, transform: `translateY(${sY}px)` }}>
-                  <div style={{ fontFamily: "sans-serif", fontSize: 11, letterSpacing: "0.18em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", marginBottom: 6, textShadow: LABEL_SHADOW }}>{stat.label}</div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 17, letterSpacing: "0.14em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", marginBottom: 6, textShadow: LABEL_SHADOW }}>{stat.label}</div>
                   <div style={{ fontFamily: "sans-serif", fontSize: si === 3 ? 22 : 17, fontWeight: si === 3 ? 700 : 500, color: si === 3 ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: "0.02em" }}>{stat.value}</div>
                 </div>
               </div>
@@ -1720,11 +1730,28 @@ function MediaSlide({
     const cardOp = interpolate(localFrame, [0, 20], [0, 1], { extrapolateRight: "clamp" });
     const cardY  = interpolate(localFrame, [0, 28], [30, 0], { extrapolateRight: "clamp", easing: easeOut });
 
-    const perfStats = [
-      { value: "190 HP", label: "Motor Gücü" },
-      { value: "400 Nm", label: "Tork"       },
-      { value: "7.2 sn", label: "0–100 km/s" },
-    ];
+    const Tfeat = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
+    const perfStats: { value: string; label: string }[] = [];
+    if (present(motorGucu)) perfStats.push({ value: motorGucu!, label: Tfeat.labels.enginePower });
+    if (present(motorHacmi)) perfStats.push({ value: motorHacmi!, label: Tfeat.labels.engineDisplacement });
+    if (present(km)) perfStats.push({ value: km!, label: Tfeat.labels.km });
+    if (perfStats.length < 3 && present(motor) && !present(motorGucu)) {
+      perfStats.push({ value: motor!, label: Tfeat.labels.enginePower });
+    }
+    if (perfStats.length < 3 && present(cekisT)) perfStats.push({ value: cekisT!, label: Tfeat.labels.drivetrain });
+    if (perfStats.length < 3 && present(yakitT)) perfStats.push({ value: yakitT!, label: Tfeat.labels.fuel });
+    if (perfStats.length < 3) {
+      const defaults = [
+        { value: "190 HP", label: Tfeat.labels.enginePower },
+        { value: "400 Nm", label: Tfeat.labels.torque },
+        { value: videoLanguage === "tr" ? "7.2 sn" : "7.2 s", label: Tfeat.labels.acceleration },
+      ];
+      for (const d of defaults) {
+        if (perfStats.length >= 3) break;
+        perfStats.push(d);
+      }
+    }
+    perfStats.splice(3);
 
     return (
       <AbsoluteFill style={{ opacity, background: "#07070d" }}>
@@ -1760,7 +1787,7 @@ function MediaSlide({
                   <div style={{ fontFamily: "sans-serif", fontSize: 56, fontWeight: 800, color: "#f8c96a", letterSpacing: "-1px", lineHeight: 1, textShadow: "0 0 48px rgba(248,201,106,0.38)" }}>
                     {stat.value}
                   </div>
-                  <div style={{ fontFamily: "sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: "0.14em", color: LABEL_COLOR, textTransform: "uppercase", marginTop: 12, textShadow: LABEL_SHADOW }}>
+                  <div style={{ fontFamily: "sans-serif", fontSize: 25, fontWeight: 700, letterSpacing: "0.11em", color: LABEL_COLOR, textTransform: "uppercase", marginTop: 12, textShadow: LABEL_SHADOW }}>
                     {stat.label}
                   </div>
                 </div>
@@ -1799,7 +1826,7 @@ function MediaSlide({
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
           {cat && (
-            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.16em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
+            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 15, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
               {cat}
             </div>
           )}
@@ -1826,7 +1853,7 @@ function MediaSlide({
           <Img src={right.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
           {right.categoryLabelEn && (
-            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: "0.16em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
+            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 15, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
               {right.categoryLabelEn}
             </div>
           )}
@@ -1869,7 +1896,7 @@ function MediaSlide({
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.5) 0%, transparent 45%)", pointerEvents: "none" }} />
           {cat && (
-            <div style={{ position: "absolute", bottom: 20, left: 22, fontFamily: "sans-serif", fontSize: 12, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase" }}>
+            <div style={{ position: "absolute", bottom: 20, left: 22, fontFamily: "sans-serif", fontSize: 16, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase" }}>
               {cat}
             </div>
           )}
@@ -1888,7 +1915,7 @@ function MediaSlide({
           <Img src={b.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
           {b.categoryLabelEn && (
-            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
+            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 14, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
               {b.categoryLabelEn}
             </div>
           )}
@@ -1907,7 +1934,7 @@ function MediaSlide({
           <Img src={c.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
           {c.categoryLabelEn && (
-            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 10, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
+            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 14, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
               {c.categoryLabelEn}
             </div>
           )}
@@ -1947,7 +1974,7 @@ function MediaSlide({
           {/* Kategori rozeti */}
           {cat && (
             <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.28)", borderRadius: 8, padding: "5px 14px" }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
             </div>
           )}
         </div>
@@ -1967,19 +1994,19 @@ function MediaSlide({
           {/* Yıl + Araç Durumu + Fiyat satırı */}
           <div style={{ opacity: t2Op, transform: `translateX(${slideX * 0.6}px)`, display: "flex", alignItems: "center", gap: 24, marginBottom: 14, flexWrap: "wrap" }}>
             <div>
-              <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.modelYear}</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.modelYear}</div>
               <div style={{ fontFamily: "sans-serif", fontSize: fsMid(20), fontWeight: 700, color: "rgba(255,255,255,0.88)" }}>{year}</div>
             </div>
             {aracDurumu && <>
               <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
               <div>
-                <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.vehicleCondition}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.vehicleCondition}</div>
                 <div style={{ fontFamily: "sans-serif", fontSize: fsMid(18), fontWeight: 600, color: "rgba(255,255,255,0.80)" }}>{aracDurumuT}</div>
               </div>
             </>}
             <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
             <div>
-              <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.salePrice}</div>
+              <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.salePrice}</div>
               <div style={{ fontFamily: "sans-serif", fontSize: fsMid(24), fontWeight: 700, color: "#f8c96a", textShadow: "0 0 18px rgba(248,201,106,0.38)" }}>{price}</div>
             </div>
           </div>
@@ -1988,7 +2015,7 @@ function MediaSlide({
           <div style={{ opacity: t3Op, display: "flex", alignItems: "center", gap: 14 }}>
             <div style={{ width: 3, height: 14, background: "#f8c96a", borderRadius: 2, flexShrink: 0 }} />
             {(motorGucu || motor || km) ? (
-              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(12), fontWeight: 600, color: "rgba(255,255,255,0.75)", letterSpacing: "0.04em" }}>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(12), fontWeight: 600, color: "rgba(255,255,255,0.75)", letterSpacing: "0.04em" }}>
                 {[motorGucu || motor, km, kasaT].filter(Boolean).join("  ·  ")}
               </span>
             ) : (
@@ -2038,7 +2065,7 @@ function MediaSlide({
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,5,10,0.45) 0%, transparent 50%)", pointerEvents: "none" }} />
           {cat && (
             <div style={{ position: "absolute", bottom: 18, left: 20 }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>{cat}</span>
             </div>
           )}
         </div>
@@ -2060,7 +2087,7 @@ function MediaSlide({
               paddingBottom: 18,
               borderBottom: ri < infoRows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
             }}>
-              <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), letterSpacing: "0.20em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 6 }}>
+              <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), letterSpacing: "0.20em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 6 }}>
                 {row.label}
               </div>
               <div style={{
@@ -2130,7 +2157,7 @@ function MediaSlide({
           opacity: textOp, transform: `translateY(${textY}px)`,
         }}>
           <div style={{ width: lineW, height: 2.5, background: "#f8c96a", borderRadius: 2, marginBottom: 26, boxShadow: "0 0 14px rgba(248,201,106,0.52)" }} />
-          <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 14 }}>
+          <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 14 }}>
             {cat ?? T.vehicleDetail}
           </div>
           <div style={{ fontFamily: "sans-serif", fontSize: fsMid(40), fontWeight: 800, color: "#ffffff", lineHeight: 1.05, letterSpacing: "-0.5px", marginBottom: 6 }}>
@@ -2156,7 +2183,7 @@ function MediaSlide({
             const dOp = interpolate(localFrame, [18 + di * 10, 38 + di * 10], [0, 1], { extrapolateRight: "clamp" });
             return (
               <div key={d.label} style={{ opacity: dOp, marginBottom: di < 3 ? 14 : 0 }}>
-                <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(9), letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 4 }}>{d.label}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), letterSpacing: "0.18em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 4 }}>{d.label}</div>
                 <div style={{ fontFamily: "sans-serif", fontSize: d.gold ? fsMid(28) : fsMid(18), fontWeight: d.gold ? 700 : 600, color: d.gold ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: d.gold ? "0.5px" : "0.1px", textShadow: d.gold ? "0 0 20px rgba(248,201,106,0.38)" : "none" }}>
                   {d.value}
                 </div>
@@ -2203,7 +2230,7 @@ function MediaSlide({
           {/* Kategori etiketi */}
           {cat && (
             <div style={{ marginBottom: 20, opacity: textOp }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 800, letterSpacing: "0.28em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 800, letterSpacing: "0.28em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
             </div>
           )}
 
@@ -2225,7 +2252,7 @@ function MediaSlide({
                 const rX  = interpolate(localFrame, [d, d + 16], [18, 0], { extrapolateRight: "clamp" });
                 return (
                   <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, display: "flex", alignItems: "baseline", gap: 12 }}>
-                    <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), fontWeight: 700, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", minWidth: 112, textShadow: LABEL_SHADOW }}>{row.label}</span>
+                    <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), fontWeight: 700, letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", minWidth: 112, textShadow: LABEL_SHADOW }}>{row.label}</span>
                     <span style={{ fontFamily: "sans-serif", fontSize: fsMid(16), fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>{row.value}</span>
                   </div>
                 );
@@ -2235,7 +2262,7 @@ function MediaSlide({
 
           {/* Fiyat — büyük ve gold */}
           <div style={{ opacity: priceOp, transform: `scale(${priceS})`, transformOrigin: "left center", marginTop: detailRows.length > 0 ? 0 : 32 }}>
-            <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(11), fontWeight: 800, letterSpacing: "0.24em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 10, textShadow: LABEL_SHADOW }}>{T.labels.price}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), fontWeight: 800, letterSpacing: "0.24em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 10, textShadow: LABEL_SHADOW }}>{T.labels.price}</div>
             <div style={{ fontFamily: "sans-serif", fontSize: 64, fontWeight: 900, color: "#f8c96a", letterSpacing: "-1px", lineHeight: 1, textShadow: "0 0 60px rgba(248,201,106,0.45), 0 4px 20px rgba(0,0,0,0.5)" }}>{price}</div>
           </div>
         </div>
@@ -2256,7 +2283,7 @@ function MediaSlide({
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(5,5,8,0.4) 0%, transparent 50%)", pointerEvents: "none" }} />
           {/* Yıl rozeti */}
           <div style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.60)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "6px 14px" }}>
-            <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(12), fontWeight: 700, color: "rgba(255,255,255,0.88)", letterSpacing: "0.08em" }}>{year}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(12), fontWeight: 700, color: "rgba(255,255,255,0.88)", letterSpacing: "0.08em" }}>{year}</span>
           </div>
         </div>
       </AbsoluteFill>
@@ -2318,7 +2345,7 @@ function MediaSlide({
             textAlign: "center",
             pointerEvents: "none",
           }}>
-            <div style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: "0.30em", color: "#f8c96a", textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: 15, fontWeight: 800, letterSpacing: "0.22em", color: "#f8c96a", textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
             <div style={{ width: 40, height: 1.5, background: "rgba(248,201,106,0.5)", borderRadius: 1, margin: "0 auto" }} />
           </div>
         )}
@@ -2370,9 +2397,9 @@ function MediaSlide({
           {/* Kategori + marka overlay */}
           <div style={{ position: "absolute", bottom: 16, left: 20, display: "flex", alignItems: "center", gap: 10 }}>
             {cat && <div style={{ background: "rgba(0,0,0,0.60)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.30)", borderRadius: 8, padding: "4px 12px" }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
             </div>}
-            <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(13), fontWeight: 600, color: "rgba(255,255,255,0.70)", letterSpacing: "0.05em" }}>{carBrand} {carModel}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(13), fontWeight: 600, color: "rgba(255,255,255,0.70)", letterSpacing: "0.05em" }}>{carBrand} {carModel}</span>
           </div>
         </div>
 
@@ -2380,7 +2407,7 @@ function MediaSlide({
         <div style={{ position: "absolute", top: "49%", left: 40, right: 40, padding: "12px 4px 10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
             <div style={{ width: lineW, height: 2, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.2))", borderRadius: 2, boxShadow: "0 0 10px rgba(248,201,106,0.4)" }} />
-            <span style={{ fontFamily: "sans-serif", fontSize: fsSmall(10), fontWeight: 700, letterSpacing: "0.22em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", whiteSpace: "nowrap" }}>{carBrand} · {year}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.22em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", whiteSpace: "nowrap" }}>{carBrand} · {year}</span>
           </div>
           <div style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.3px", lineHeight: 1 }}>{price}</div>
         </div>
@@ -2412,7 +2439,7 @@ function MediaSlide({
                 justifyContent: "center",
                 backdropFilter: "blur(12px)",
               }}>
-                <div style={{ fontFamily: "sans-serif", fontSize: fsSmall(9), fontWeight: 700, letterSpacing: "0.20em", color: "rgba(255,255,255,0.60)", textTransform: "uppercase", marginBottom: 6 }}>{s.label}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), fontWeight: 700, letterSpacing: "0.16em", color: "rgba(255,255,255,0.60)", textTransform: "uppercase", marginBottom: 6 }}>{s.label}</div>
                 <div style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 800, color: si === 1 ? "#f8c96a" : "rgba(255,255,255,0.95)", letterSpacing: "-0.2px", lineHeight: 1, textShadow: si === 1 ? "0 0 20px rgba(248,201,106,0.40)" : "none" }}>{s.value}</div>
               </div>
             );
@@ -2505,6 +2532,7 @@ function MediaSlide({
           motorHacmi={motorHacmi}
           aracDurumu={aracDurumu}
           aspectRatio={aspectRatio}
+          videoLanguage={videoLanguage}
         />
       )}
 
@@ -2521,9 +2549,9 @@ function MediaSlide({
             border: "1px solid rgba(255,255,255,0.12)",
             backdropFilter: "blur(12px)",
             fontFamily: "system-ui, sans-serif",
-            fontSize: 13,
+            fontSize: 17,
             fontWeight: 600,
-            letterSpacing: "0.08em",
+            letterSpacing: "0.07em",
             textTransform: "uppercase",
             color: "rgba(255,255,255,0.92)",
           }}
@@ -2555,6 +2583,7 @@ function MediaSlide({
           agirHasarKayitli={agirHasarKayitli}
           plaka={plaka}
           renk={renk}
+          videoLanguage={videoLanguage}
         />
       )}
 
@@ -2567,7 +2596,9 @@ function MediaSlide({
       {sceneVariant === "spec_table" && (
         <SpecTableOverlay
           localFrame={localFrame}
+          categoryId={categoryId}
           categoryLabelEn={cat ?? "exterior"}
+          videoLanguage={videoLanguage}
         />
       )}
     </AbsoluteFill>
@@ -2591,6 +2622,7 @@ function KineticHud({
   motorHacmi,
   aracDurumu,
   aspectRatio,
+  videoLanguage,
 }: {
   localFrame: number;
   categoryLabelEn?: string;
@@ -2608,7 +2640,9 @@ function KineticHud({
   motorHacmi?: string;
   aracDurumu?: string;
   aspectRatio?: AspectRatioOption;
+  videoLanguage: VideoLanguage;
 }) {
+  const Th = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
   const portrait = aspectRatio ? needsBlurBackground(aspectRatio) : false;
   const pad = portrait ? 56 : 50;
 
@@ -2616,17 +2650,17 @@ function KineticHud({
   const rise = interpolate(localFrame, [10, 34], [14, 0], { extrapolateRight: "clamp", easing: easeOut });
 
   const chips: { k: string; v: string; gold?: boolean }[] = [
-    { k: "YIL", v: year },
-    aracDurumu ? { k: "DURUM", v: aracDurumu } : null,
-    km ? { k: "KM", v: km } : null,
-    vites ? { k: "VİTES", v: vites } : null,
-    yakit ? { k: "YAKIT", v: yakit } : null,
-    kasa ? { k: "KASA", v: kasa } : null,
-    motorGucu ? { k: "GÜÇ", v: motorGucu } : null,
-    motorHacmi ? { k: "HACİM", v: motorHacmi } : null,
-    cekis ? { k: "ÇEKİŞ", v: cekis } : null,
-    renk ? { k: "RENK", v: renk } : null,
-    { k: "FİYAT", v: price, gold: true },
+    { k: Th.uiYear, v: year },
+    aracDurumu ? { k: Th.hudCondition, v: translateEnumValue(videoLanguage, "condition", aracDurumu)! } : null,
+    km ? { k: Th.labels.km, v: km } : null,
+    vites ? { k: Th.labels.gearbox, v: translateEnumValue(videoLanguage, "gearbox", vites)! } : null,
+    yakit ? { k: Th.labels.fuel, v: translateEnumValue(videoLanguage, "fuel", yakit)! } : null,
+    kasa ? { k: Th.labels.body, v: translateEnumValue(videoLanguage, "body", kasa)! } : null,
+    motorGucu ? { k: Th.hudPower, v: motorGucu } : null,
+    motorHacmi ? { k: Th.hudVolume, v: motorHacmi } : null,
+    cekis ? { k: Th.labels.drivetrain, v: translateEnumValue(videoLanguage, "drivetrain", cekis)! } : null,
+    renk ? { k: Th.labels.color, v: translateEnumValue(videoLanguage, "color", renk)! } : null,
+    { k: Th.labels.price, v: price, gold: true },
   ].filter(Boolean).slice(0, portrait ? 7 : 8) as { k: string; v: string; gold?: boolean }[];
 
   const tickerW = 520 + (chips.length * 160);
@@ -2646,7 +2680,7 @@ function KineticHud({
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {categoryLabelEn && (
             <div style={{ padding: "8px 12px", borderRadius: 12, background: "rgba(0,0,0,0.42)", border: "1px solid rgba(248,201,106,0.22)", backdropFilter: "blur(12px)" }}>
-              <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 11, fontWeight: 800, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>
+              <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 15, fontWeight: 800, letterSpacing: "0.15em", color: "#f8c96a", textTransform: "uppercase" }}>
                 {categoryLabelEn}
               </span>
             </div>
@@ -2696,7 +2730,7 @@ function KineticHud({
                   minWidth: c.gold ? 220 : 180,
                 }}
               >
-                <div style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 800, letterSpacing: "0.18em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>
+                <div style={{ fontFamily: "sans-serif", fontSize: 14, fontWeight: 800, letterSpacing: "0.14em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>
                   {c.k}
                 </div>
                 <div style={{ fontFamily: "sans-serif", fontSize: c.gold ? (portrait ? 22 : 20) : 16, fontWeight: c.gold ? 800 : 700, color: c.gold ? "#f8c96a" : "rgba(255,255,255,0.92)", letterSpacing: "0.3px", textShadow: c.gold ? "0 0 18px rgba(248,201,106,0.35)" : "none" }}>
@@ -3131,21 +3165,25 @@ function GalleryBadge({ name, layout }: { name: string; layout: "portrait" | "la
 function OutroFrame({
   carBrand,
   carModel,
+  year,
   price,
   galleryName,
   ctaPhone,
   videoLanguage,
   outroStartFrame,
   layout,
+  specGridRows,
 }: {
   carBrand: string;
   carModel: string;
+  year?: string;
   price: string;
   galleryName: string;
   ctaPhone?: string;
   videoLanguage: VideoLanguage;
   outroStartFrame: number;
   layout: "portrait" | "landscape";
+  specGridRows: { label: string; value: string }[];
 }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -3293,6 +3331,20 @@ function OutroFrame({
           >
             {carModel}
           </div>
+          {year?.trim() ? (
+            <div
+              style={{
+                fontFamily: "sans-serif",
+                fontWeight: 600,
+                fontSize: isLandscape ? 22 : 26,
+                color: "rgba(255,255,255,0.78)",
+                marginTop: 14,
+                letterSpacing: "0.2em",
+              }}
+            >
+              {year.trim()}
+            </div>
+          ) : null}
 
           {/* İnce ayraç */}
           <div
@@ -3319,6 +3371,62 @@ function OutroFrame({
           >
             {price}
           </div>
+
+          {/* Kalan ilan alanları — doldurulmuş her satır */}
+          {specGridRows.length > 0 ? (
+            <div
+              style={{
+                width: "100%",
+                marginTop: isLandscape ? 28 : 32,
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: isLandscape ? "12px 20px" : "14px 16px",
+                maxWidth: 920,
+              }}
+            >
+              {specGridRows.map((row, ri) => (
+                <div
+                  key={`${row.label}-${ri}`}
+                  style={{
+                    minWidth: isLandscape ? "38%" : "100%",
+                    maxWidth: isLandscape ? "48%" : "100%",
+                    textAlign: "left",
+                    padding: "12px 16px",
+                    borderRadius: 14,
+                    background: "rgba(255,255,255,0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontFamily: "sans-serif",
+                      fontSize: isLandscape ? 12 : 13,
+                      fontWeight: 700,
+                      letterSpacing: "0.14em",
+                      color: "rgba(255,255,255,0.55)",
+                      textTransform: "uppercase",
+                      marginBottom: 6,
+                    }}
+                  >
+                    {row.label}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: "sans-serif",
+                      fontSize: isLandscape ? 17 : 18,
+                      fontWeight: 600,
+                      color: "rgba(255,255,255,0.94)",
+                      lineHeight: 1.35,
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    {row.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {/* CTA butonu */}
           <div
@@ -3427,6 +3535,35 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   const bgmDuck = voiceoverActive ? 0.18 : 1;
   const bgmVol = Math.max(0, Math.min(1, bgmVolume)) * bgmFade * bgmDuck;
 
+  const listingForOutro: ListingPayload = translateListingValuesForVideo(videoLanguage, {
+    carBrand,
+    carModel,
+    year,
+    price,
+    ctaPhone,
+    km,
+    motor,
+    renk,
+    vites,
+    yakit,
+    kasa,
+    seri,
+    aracDurumu,
+    motorGucu,
+    motorHacmi,
+    cekis,
+    garanti,
+    agirHasarKayitli,
+    plaka,
+    ilanTarihi,
+  });
+
+  const outroSpecGridRows = buildOutroGridRowsOnly(
+    listingForOutro,
+    videoLanguage,
+    VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr,
+  );
+
   // Aktif sahnede hangi variant çalışıyor?
   let activeVariant = "full_bleed";
   for (let i = 0; i < mediaItems.length; i++) {
@@ -3522,12 +3659,14 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
         <OutroFrame
           carBrand={carBrand}
           carModel={carModel}
+          year={year}
           price={price}
           galleryName={galleryName}
           ctaPhone={ctaPhone}
           videoLanguage={videoLanguage}
           outroStartFrame={outroStartFrame}
           layout={effectiveLayout}
+          specGridRows={outroSpecGridRows}
         />
       )}
     </AbsoluteFill>

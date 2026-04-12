@@ -1,8 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 import { FIXED_CATEGORY_IDS } from "@/lib/photoCategories";
-
-const client = new Anthropic();
+import { getOpenAI, getOpenAIModelAnalyze } from "@/lib/openai";
+import { parseLanguageCode, type LanguageCode } from "@/lib/languages";
+import { buildListingPromptSection, parseListingPayload } from "@/lib/listingPayload";
 
 interface PhotoInput {
   index: number;
@@ -11,14 +12,12 @@ interface PhotoInput {
   height?: number;
 }
 
-import { parseLanguageCode, type LanguageCode } from "@/lib/languages";
-
 function voiceoverLanguagePreamble(language: LanguageCode): string {
   if (language === "en") {
     return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
 The field "voiceover_text" on EVERY storyboard shot MUST be written in ENGLISH ONLY — full sentences, natural spoken English.
-TASK A still asks for "comment_tr" in Turkish: that is ONLY for on-screen notes. Do NOT copy Turkish from comment_tr into voiceover_text.
-If voiceover_text contains any Turkish words when English is required, the output is INVALID — rewrite voiceover_text in English.
+The field "comment_tr" is a legacy JSON key: its CONTENT must be in the VIDEO LANGUAGE (same as on-screen text), NOT Turkish unless the video language is Turkish. Do NOT copy listing data or other languages into voiceover_text.
+If voiceover_text contains any non-English words when English is required, the output is INVALID — rewrite voiceover_text in English.
 
 `;
   }
@@ -66,7 +65,7 @@ Do NOT mix Turkish or English in voiceover_text.
   }
   return `━━ VOICEOVER LANGUAGE (HIGHEST PRIORITY) ━━
 The field "voiceover_text" on EVERY storyboard shot MUST be written in TURKISH ONLY — doğal konuşma Türkçesi.
-English category_label_en and comment_tr instructions elsewhere do NOT apply to voiceover_text; voiceover_text stays Turkish.
+On-screen "comment_tr" (legacy key name) must also be Turkish when VIDEO LANGUAGE is tr. voiceover_text must match VIDEO LANGUAGE.
 
 `;
 }
@@ -103,6 +102,7 @@ ${antiMix}
 - One or two short sentences. Premium dealership / social reel tone.
 - The line must be speakable within duration_frames at natural pacing (~2.0–2.5 words per second). Prefer shorter lines.
 - Narration is strictly sequential in the final edit: the next shot's voiceover starts only after this shot's time ends — write each line as a standalone beat for that shot only.
+- Do NOT repeat the same concrete facts (price, KM, fuel, etc.) in back-to-back shots unless one line is emotional/hook and the next moves on — avoid sounding like a spec list read twice.
 - Do not use double-quote characters inside voiceover_text.
 
 OUTPUT: each storyboard object MUST include "voiceover_text" (non-empty string). Example for ${langLabel}:
@@ -112,6 +112,7 @@ OUTPUT: each storyboard object MUST include "voiceover_text" (non-empty string).
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
+    const listing = parseListingPayload(body.listing);
     const aspectRatio: string = body.aspectRatio ?? "16:9";
     const videoLanguage: LanguageCode = parseLanguageCode(body.videoLanguage, "tr");
     const userNotes = String(body.userNotes ?? "").trim().slice(0, 800);
@@ -127,16 +128,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Fotoğraf bulunamadı" }, { status: 400 });
     }
 
-    const contentBlocks: Anthropic.MessageParam["content"] = [];
+    const contentParts: OpenAI.Chat.ChatCompletionContentPart[] = [];
 
     for (const p of clean) {
-      contentBlocks.push({
+      contentParts.push({
         type: "text",
         text: `── Photo index ${p.index} ──`,
       });
-      contentBlocks.push({
-        type: "image",
-        source: { type: "base64", media_type: "image/jpeg", data: p.base64 },
+      contentParts.push({
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,${p.base64}` },
       });
     }
 
@@ -172,6 +173,7 @@ ${photoDimLines}
    - If the photo is a close-up detail (badge/headlight/wheel/interior button) → prefer "callout".
    - If the photo is a clean side profile → "split_band" is allowed (otherwise avoid it).
    - If the photo is a full-body hero angle → "spotlight" (if allowed by format) makes a strong hook.
+7. ANTI-REPETITION (story feel): Do NOT stack multiple shots that mainly re-display the same spec bundle (KM + vites + yakit + price). After any dense data shot, the next shot should change “job”: detail, cinematic, comparison, or mood — not another full spec table. The outro of the final video already summarizes listing fields; the middle must stay dynamic.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 WHAT EACH VARIANT DISPLAYS:
@@ -193,11 +195,11 @@ WHAT EACH VARIANT DISPLAYS:
 • "spotlight"       → Tam ekran spot ışığı: merkez parlak, kenarlar çok koyu, arka planda marka watermark (DRAMATİK GİRİŞ)
 • "stats_grid"      → Üstte foto kartı, altta 2×2 istatistik grid: KM / Motor Gücü / Vites / Yakıt
 
-TASK A — For EVERY photo, write a short critique in the VIDEO LANGUAGE above (store it in field "comment_tr").
+TASK A — For EVERY photo, write a short on-screen critique in the VIDEO LANGUAGE above (store in field "comment_tr"; key name is legacy, content is NOT necessarily Turkish).
 TASK B — Assign exactly ONE unique category_id per photo:
 1) Prefer fixed ids (use each max once): "${fixedList}"
-2) Otherwise invent a specific English snake_case id.
-3) category_label_en: short English label for display.
+2) Otherwise invent a specific English snake_case id (stable id for layout logic).
+3) category_label: short display label in the VIDEO LANGUAGE (same as VIDEO LANGUAGE — NOT English unless video language is English). You may also output category_label_en as an alias; prefer category_label.
 `;
 
     const jsonOutputBlock = `
@@ -208,14 +210,14 @@ OUTPUT — ONLY valid JSON, no markdown:
   "storyboard": [{
     "source_index": 0,
     "category_id": "front",
-    "category_label_en": "Front",
-    "comment_tr": "short critique in video language",
+    "category_label": "short label in VIDEO LANGUAGE",
+    "comment_tr": "short critique in VIDEO LANGUAGE",
     "quality_score": 8,
     "lighting": "good",
     "duration_frames": 180,
     "scene_variant": "framed_center"
   }],
-  "editing_notes_tr": "Short overall editing note in the VIDEO LANGUAGE above",
+  "editing_notes_tr": "Short note in VIDEO LANGUAGE: rhythm + variety; the edit must NOT feel like the same spec numbers on a loop",
   "outro_frames": 90
 }
 
@@ -499,29 +501,43 @@ ${jsonOutputBlock}`;
     if (userNotes) {
       promptText += `\n\n━━ USER NOTES (HIGH PRIORITY) ━━\n${userNotes}\n`;
     }
+    const listingSection = buildListingPromptSection(listing);
+    if (listingSection) {
+      promptText += `\n\n${listingSection}`;
+    }
     if (voiceoverEnabled) {
       promptText = voiceoverLanguagePreamble(voiceoverLanguage) + promptText;
       promptText += voiceoverPromptAppend(voiceoverLanguage);
       promptText += `\n\nCTA RULE: The LAST storyboard shot's voiceover_text must end with a short call-to-action in the same language (e.g. contact us / DM / call). Keep it one short sentence.`;
     }
 
-    contentBlocks.push({ type: "text", text: promptText });
+    contentParts.push({ type: "text", text: promptText });
 
-    const response = await client.messages.create({
-      model: "claude-opus-4-6",
+    const openai = getOpenAI();
+    const model = getOpenAIModelAnalyze();
+
+    const completion = await openai.chat.completions.create({
+      model,
       max_tokens: 8192,
-      messages: [{ role: "user", content: contentBlocks }],
+      temperature: 0,
+      seed: 42,
+      messages: [{ role: "user", content: contentParts }],
+      response_format: { type: "json_object" },
     });
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    const rawText = textBlock?.type === "text" ? textBlock.text : "";
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-
-    if (!jsonMatch) {
-      throw new Error("AI geçerli JSON döndürmedi: " + rawText.slice(0, 200));
+    const rawText = completion.choices[0]?.message?.content ?? "";
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error("AI geçerli JSON döndürmedi: " + rawText.slice(0, 200));
+      }
+      parsed = JSON.parse(jsonMatch[0]);
     }
 
-    return NextResponse.json(JSON.parse(jsonMatch[0]));
+    return NextResponse.json(parsed);
   } catch (err) {
     console.error("[/api/analyze]", err);
     return NextResponse.json(
