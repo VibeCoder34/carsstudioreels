@@ -660,7 +660,7 @@ function FloatingSpecCard({
         { label: T.uiModel, value: carModel, highlight: false },
         { label: T.uiYear,  value: year,     highlight: false },
         present(price) ? { label: T.labels.price, value: price!,   highlight: true  } : null,
-      ];
+      ].filter(Boolean) as { label: string; value: string; highlight: boolean }[];
 
   return (
     <div
@@ -2661,7 +2661,7 @@ function KineticHud({
   carBrand: string;
   carModel: string;
   year: string;
-  price: string;
+  price?: string;
   km?: string;
   vites?: string;
   yakit?: string;
