@@ -148,9 +148,20 @@ export function resolveShotCategoryLabel(
 ): string {
   const id = categoryId.trim();
   if (isFixedCategoryId(id)) return getFixedCategoryLabel(lang, id);
-  const t = (aiLabel ?? "").trim();
-  if (t) return t;
-  return id.replace(/_/g, " ");
+  const generic: Record<LanguageCode, string> = {
+    tr: "Detay",
+    en: "Detail",
+    es: "Detalle",
+    fr: "Détail",
+    de: "Detail",
+    it: "Dettaglio",
+    ru: "Деталь",
+    pt: "Detalhe",
+  };
+
+  // Non-fixed categories coming from AI can be wrong (e.g. "direksiyon" on a non-steering shot).
+  // For consistency, we show a safe generic label instead of guessing.
+  return generic[lang] ?? generic.en;
 }
 
 export function isFixedCategoryId(id: string): id is FixedCategoryId {

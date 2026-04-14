@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import {
@@ -38,6 +38,7 @@ import {
 } from "@/lib/voiceoverPipeline";
 import { LANGUAGE_OPTIONS, type LanguageCode } from "@/lib/languages";
 import { MUSIC_TRACKS, resolveMusicTrack, type MusicTrackId } from "@/lib/music";
+import { defaultCurrencyForLanguage, localeForLanguage, type CurrencyCode } from "@/lib/money";
 import {
   BODY_OPTIONS,
   COLOR_OPTIONS,
@@ -95,6 +96,27 @@ interface FormData {
   ilanTarihi: string;
 }
 
+function pricePlaceholderForCurrency(currency: CurrencyCode, videoLanguage: LanguageCode): string {
+  const sample: Record<CurrencyCode, number> = {
+    TRY: 2850000,
+    USD: 85000,
+    EUR: 79000,
+    GBP: 69000,
+    RUB: 7900000,
+  };
+  const n = sample[currency] ?? 100000;
+  try {
+    return new Intl.NumberFormat(localeForLanguage(videoLanguage), {
+      style: "decimal",
+      useGrouping: true,
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    // Fallback: Turkish-style grouping
+    return "2.850.000";
+  }
+}
+
 /* ─── Ana sayfa ──────────────────────────────────────────── */
 
 export default function DemoPage() {
@@ -132,6 +154,7 @@ export default function DemoPage() {
   const [identifyAttempted, setIdentifyAttempted] = useState(false);
   const [reelStyle, setReelStyle] = useState<ReelStyle>("cinematic");
   const [videoLanguage, setVideoLanguage] = useState<LanguageCode>("tr");
+  const [currency, setCurrency] = useState<CurrencyCode>(() => defaultCurrencyForLanguage("tr"));
   const [videoNotes, setVideoNotes] = useState("");
   const [musicTrackId, setMusicTrackId] = useState<MusicTrackId>("smooth1");
   const [voiceoverEnabled, setVoiceoverEnabled] = useState(false);
@@ -141,6 +164,10 @@ export default function DemoPage() {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const preAnalyzeMediaRef = useRef<MediaItem[] | null>(null);
+
+  useEffect(() => {
+    setCurrency(defaultCurrencyForLanguage(videoLanguage));
+  }, [videoLanguage]);
 
   const identifyCarFromPhotos = useCallback(async (fileList: File[]) => {
     if (!fileList.length) return;
@@ -281,10 +308,10 @@ export default function DemoPage() {
           durationFrames: shot.duration_frames,
           sceneVariant: isSceneVariant(shot.scene_variant) ? shot.scene_variant : undefined,
           categoryId: shot.category_id,
-          categoryLabelEn: resolveShotCategoryLabel(
+          categoryLabel: resolveShotCategoryLabel(
             videoLanguage,
             shot.category_id,
-            shot.category_label_en,
+            shot.category_label ?? shot.category_label_en,
           ),
           voiceoverText: shot.voiceover_text,
         };
@@ -418,6 +445,8 @@ export default function DemoPage() {
             form={form}
             isIdentifying={isIdentifying}
             identifyAttempted={identifyAttempted}
+            currency={currency}
+            onCurrencyChange={setCurrency}
             onFormChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
             onConfirm={handleAnalyze}
             onBack={() => setStep("upload")}
@@ -438,6 +467,7 @@ export default function DemoPage() {
             outroFrames={outroFrames}
             reelStyle={reelStyle}
             videoLanguage={videoLanguage}
+            currency={currency}
             musicTrackId={musicTrackId}
             musicVolume={musicVolume}
             voiceoverEnabled={voiceoverEnabled}
@@ -905,12 +935,22 @@ function enumSelect(
 }
 
 function IdentifyStep({
-  mediaItems, form, isIdentifying, identifyAttempted, onFormChange, onConfirm, onBack,
+  mediaItems,
+  form,
+  isIdentifying,
+  identifyAttempted,
+  currency,
+  onCurrencyChange,
+  onFormChange,
+  onConfirm,
+  onBack,
 }: {
   mediaItems: MediaItem[];
   form: FormData;
   isIdentifying: boolean;
   identifyAttempted: boolean;
+  currency: CurrencyCode;
+  onCurrencyChange: (currency: CurrencyCode) => void;
   onFormChange: (field: keyof FormData, value: string) => void;
   onConfirm: () => void;
   onBack: () => void;
@@ -926,6 +966,7 @@ function IdentifyStep({
   const showRequiredUi = identifyAttempted && !isIdentifying;
   const isPriceMissing = showRequiredUi && !form.price.trim();
   const isKmMissing = showRequiredUi && !form.km.trim();
+  const pricePlaceholder = pricePlaceholderForCurrency(currency, "tr");
 
   return (
     <div className="flex-1 overflow-auto px-4 py-6 sm:px-6 bg-[var(--background)]">
@@ -992,9 +1033,32 @@ function IdentifyStep({
                   <input
                     value={form[field]}
                     onChange={(e) => onFormChange(field, e.target.value)}
-                    placeholder={field === "carBrand" ? "BMW" : field === "carModel" ? "320i" : field === "year" ? "2020" : "₺500.000"}
+                    placeholder={
+                      field === "carBrand"
+                        ? "BMW"
+                        : field === "carModel"
+                        ? "320i"
+                        : field === "year"
+                        ? "2020"
+                        : pricePlaceholder
+                    }
                     className={INPUT_CLS}
                   />
+                  {field === "price" && (
+                    <div className="mt-2">
+                      <select
+                        value={currency}
+                        onChange={(e) => onCurrencyChange(e.target.value as CurrencyCode)}
+                        className={INPUT_CLS}
+                      >
+                        <option value="TRY">TRY (₺)</option>
+                        <option value="USD">USD ($)</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="GBP">GBP (£)</option>
+                        <option value="RUB">RUB (₽)</option>
+                      </select>
+                    </div>
+                  )}
                   {field === "price" && isPriceMissing && (
                     <div className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
                       Lütfen fiyat bilgisini girin.
@@ -1243,7 +1307,17 @@ async function resizeImage(dataUrl: string, maxPx = 1920): Promise<string> {
 }
 
 function PreviewStep({
-  mediaItems, form, totalFrames, analysisResult, aspectRatio, outroFrames, reelStyle, videoLanguage, musicTrackId, musicVolume,
+  mediaItems,
+  form,
+  totalFrames,
+  analysisResult,
+  aspectRatio,
+  outroFrames,
+  reelStyle,
+  videoLanguage,
+  currency,
+  musicTrackId,
+  musicVolume,
   voiceoverEnabled, voiceoverSync, ttsNotice, onReset, onVariantChange,
 }: {
   mediaItems: MediaItem[];
@@ -1254,6 +1328,7 @@ function PreviewStep({
   outroFrames: number;
   reelStyle: ReelStyle;
   videoLanguage: LanguageCode;
+  currency: CurrencyCode;
   musicTrackId: MusicTrackId;
   musicVolume: number;
   voiceoverEnabled: boolean;
@@ -1303,6 +1378,7 @@ function PreviewStep({
         carModel: form.carModel,
         year: form.year,
         price: form.price,
+        currency,
         galleryName: "CarStudio",
         ctaPhone: form.ctaPhone || undefined,
         km: form.km || undefined,
@@ -1477,6 +1553,7 @@ function PreviewStep({
                     carModel: form.carModel,
                     year: form.year,
                     price: form.price,
+                    currency,
                     galleryName: "CarStudio",
                     ctaPhone: form.ctaPhone || undefined,
                     km: form.km || undefined,

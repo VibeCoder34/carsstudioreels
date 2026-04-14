@@ -12,7 +12,9 @@ export interface StoryboardShot {
    * Kısa kategori etiketi — videoda gösterilir; video dili ile uyumlu olmalı.
    * (JSON: `category_label` veya geriye dönük `category_label_en`.)
    */
-  category_label_en: string;
+  category_label?: string;
+  /** Geriye dönük alias (adı "en" olsa da içerik video dili olabilir). */
+  category_label_en?: string;
   comment_tr: string;
   quality_score: number;
   lighting: string;
@@ -185,9 +187,20 @@ function asShot(s: Record<string, unknown>): StoryboardShot {
   return {
     source_index: Number(s.source_index ?? s.sourceIndex ?? 0),
     category_id: String(s.category_id ?? s.categoryId ?? "other"),
-    category_label_en: String(
-      s.category_label ?? s.category_label_en ?? s.categoryLabelEn ?? "",
-    ),
+    category_label: typeof s.category_label === "string"
+      ? s.category_label
+      : typeof s.categoryLabel === "string"
+      ? s.categoryLabel
+      : typeof s.category_label_en === "string"
+      ? s.category_label_en
+      : typeof s.categoryLabelEn === "string"
+      ? s.categoryLabelEn
+      : "",
+    category_label_en: typeof s.category_label_en === "string"
+      ? s.category_label_en
+      : typeof s.categoryLabelEn === "string"
+      ? s.categoryLabelEn
+      : undefined,
     comment_tr: String(s.comment_tr ?? s.commentTr ?? ""),
     quality_score: Number(s.quality_score ?? s.qualityScore ?? 7),
     lighting: String(s.lighting ?? "good"),
@@ -215,7 +228,7 @@ export function repairStoryboard(
     return {
       source_index: i,
       category_id: `photo_${i + 1}`,
-      category_label_en: `${fb.photoLabel} ${i + 1}`,
+      category_label: `${fb.photoLabel} ${i + 1}`,
       comment_tr: fb.missingComment,
       quality_score: 7,
       lighting: "average",
@@ -286,9 +299,35 @@ export function normalizePhotoAnalyzeResult(
     scene_variant: coerceSceneVariant(s.scene_variant || "full_bleed") as string,
     duration_frames: Math.max(MIN_SHOT_FRAMES, Math.floor(s.duration_frames || 60)),
     category_id: (s.category_id || "other").replace(/\s+/g, "_").toLowerCase(),
-    category_label_en: s.category_label_en || s.category_id,
+    category_label: (s.category_label?.trim() || s.category_label_en?.trim() || s.category_id).trim(),
+    category_label_en: s.category_label_en?.trim() || undefined,
     comment_tr: s.comment_tr || "",
   }));
+
+  // Fix language leakage: the model sometimes returns Turkish in comment_tr even when VIDEO LANGUAGE is not tr.
+  const safeComment: Record<LanguageCode, string> = {
+    tr: "Detay kadraj; temiz ışık ve premium görünüm.",
+    en: "Clean angle, strong lighting, premium look.",
+    es: "Buen encuadre, luz limpia, aspecto premium.",
+    fr: "Cadrage propre, belle lumière, rendu premium.",
+    de: "Sauberer Winkel, gutes Licht, Premium-Look.",
+    it: "Inquadratura pulita, buona luce, look premium.",
+    ru: "Чистый ракурс, хороший свет, премиальный вид.",
+    pt: "Bom enquadramento, luz limpa, visual premium.",
+  };
+  const looksTurkish = (text: string): boolean =>
+    /[ığüşöçİĞÜŞÖÇ]/.test(text) ||
+    /\b(ve|bir|çok|için|daha|gibi|arac|araba|fiyat|kilometre)\b/i.test(text);
+
+  if (videoLanguage !== "tr") {
+    storyboard = storyboard.map((s) => {
+      const c = (s.comment_tr ?? "").trim();
+      if (!c) return { ...s, comment_tr: safeComment[videoLanguage] ?? safeComment.en };
+      if (looksTurkish(c)) return { ...s, comment_tr: safeComment[videoLanguage] ?? safeComment.en };
+      return s;
+    });
+  }
+
   storyboard = repairStoryboard(storyboard, photoCount, videoLanguage);
   dedupeCategoryIds(storyboard);
   normalizeStoryboardDurations(storyboard);

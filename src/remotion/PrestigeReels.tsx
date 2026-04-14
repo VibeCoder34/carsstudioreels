@@ -14,6 +14,8 @@ import type { LanguageCode } from "@/lib/languages";
 import { translateEnumValue, translateListingValuesForVideo, translateYesNo } from "@/lib/vehicleEnumI18n";
 import { buildOutroGridRowsOnly, type ListingPayload } from "@/lib/listingPayload";
 import { getSpecTableData, type SpecCategory, type SpecRow } from "@/lib/specTableI18n";
+import { defaultCurrencyForLanguage, formatPrice, type CurrencyCode } from "@/lib/money";
+import { resolveShotCategoryLabel } from "@/lib/photoCategories";
 
 /* ─── Tipler ─────────────────────────────────────────────── */
 
@@ -29,7 +31,9 @@ export type MediaItem = {
   outFrame?: number;
   /** Storyboard (analyze API) — sahne animasyonu */
   sceneVariant?: SceneVariant;
-  /** Kısa kategori etiketi (video dili; prop adı tarihî) */
+  /** Kısa kategori etiketi (video dili) */
+  categoryLabel?: string;
+  /** Geriye dönük alias (adı en olsa da içerik video dili olabilir) */
   categoryLabelEn?: string;
   /** Sabit veya snake_case kategori id — spec tablosu eşlemesi için */
   categoryId?: string;
@@ -66,6 +70,8 @@ export type PrestigeReelsProps = {
   carModel: string;
   year: string;
   price: string;
+  /** Para birimi (default: videoLanguage'a göre otomatik) */
+  currency?: CurrencyCode;
   galleryName: string;
   ctaPhone?: string;
   /** Videodaki sabit metinlerin dili (etiketler, fallback'ler). */
@@ -111,10 +117,24 @@ export const OUTRO_FRAMES = 90;
 
 type VideoLanguage = LanguageCode;
 
+// Global UI typography boost for overlays that still use literal font sizes.
+// Kept separate from format-specific fsSmall/fsMid scaling.
+const UI_TEXT_SCALE = 2.05;
+const uiFont = (n: number) => Math.round(n * UI_TEXT_SCALE);
+
 function present(v?: string): string | undefined {
   if (typeof v !== "string") return undefined;
   const t = v.trim();
   return t.length ? t : undefined;
+}
+
+function ensureUnit(value: string | undefined, unit: string, unitRegex: RegExp): string | undefined {
+  const t = value?.trim();
+  if (!t) return value;
+  if (unitRegex.test(t)) return t;
+  // If it's purely numeric-ish, append unit; otherwise leave as-is to avoid weird mixes.
+  if (/^[\d\s.,]+$/.test(t)) return `${t} ${unit}`.trim();
+  return t;
 }
 
 const VIDEO_I18N: Record<
@@ -613,7 +633,7 @@ function FloatingSpecCard({
   carBrand: string;
   carModel: string;
   year: string;
-  price: string;
+  price?: string;
   videoLanguage: VideoLanguage;
 }) {
   const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
@@ -639,7 +659,7 @@ function FloatingSpecCard({
         { label: T.uiBrand, value: carBrand, highlight: false },
         { label: T.uiModel, value: carModel, highlight: false },
         { label: T.uiYear,  value: year,     highlight: false },
-        { label: T.labels.price, value: price,    highlight: true  },
+        present(price) ? { label: T.labels.price, value: price!,   highlight: true  } : null,
       ];
 
   return (
@@ -675,7 +695,7 @@ function FloatingSpecCard({
             <div
               style={{
                 fontFamily: "sans-serif",
-                fontSize: 14,
+                fontSize: uiFont(14),
                 letterSpacing: "0.12em",
                 color: "rgba(255,255,255,0.36)",
                 textTransform: "uppercase",
@@ -687,7 +707,7 @@ function FloatingSpecCard({
             <div
               style={{
                 fontFamily: "sans-serif",
-                fontSize: row.highlight ? 30 : 18,
+                fontSize: row.highlight ? uiFont(30) : uiFont(18),
                 fontWeight: row.highlight ? 700 : 500,
                 color: row.highlight ? "#f8c96a" : "rgba(255,255,255,0.9)",
                 letterSpacing: "0.5px",
@@ -773,7 +793,7 @@ function CalloutAnnotation({ localFrame, label }: { localFrame: number; label: s
         <div
           style={{
             fontFamily: "sans-serif",
-            fontSize: 16,
+            fontSize: uiFont(16),
             fontWeight: 600,
             letterSpacing: "0.12em",
             textTransform: "uppercase",
@@ -878,7 +898,7 @@ function SpecTableOverlay({
           <span
             style={{
               fontFamily: "sans-serif",
-              fontSize: 16,
+              fontSize: uiFont(16),
               fontWeight: 700,
               letterSpacing: "0.17em",
               color: "rgba(255,255,255,0.72)",
@@ -937,7 +957,7 @@ function SpecTableOverlay({
                   <span
                     style={{
                       fontFamily: "sans-serif",
-                      fontSize: 16,
+                      fontSize: uiFont(16),
                       fontWeight: 400,
                       color: "rgba(255,255,255,0.80)",
                       letterSpacing: "0.02em",
@@ -975,7 +995,7 @@ function SpecTableOverlay({
                 <span
                   style={{
                     fontFamily: "sans-serif",
-                    fontSize: 15,
+                    fontSize: uiFont(15),
                     fontWeight: 600,
                     color: "rgba(255,255,255,0.60)",
                     letterSpacing: "0.09em",
@@ -1012,7 +1032,7 @@ function SpecTableOverlay({
                     <span
                       style={{
                         fontFamily: "sans-serif",
-                        fontSize: 15,
+                        fontSize: uiFont(15),
                         fontWeight: 600,
                         color: "rgba(255,255,255,0.92)",
                         letterSpacing: "0.04em",
@@ -1027,7 +1047,7 @@ function SpecTableOverlay({
                   <span
                     style={{
                       fontFamily: "sans-serif",
-                      fontSize: 15,
+                      fontSize: uiFont(15),
                       fontWeight: 600,
                       color: "rgba(255,255,255,0.92)",
                       letterSpacing: "0.04em",
@@ -1056,6 +1076,7 @@ function MediaSlide({
   carModel,
   year,
   price,
+  currency,
   videoLanguage,
   aspectRatio,
   km,
@@ -1081,7 +1102,8 @@ function MediaSlide({
   carBrand: string;
   carModel: string;
   year: string;
-  price: string;
+  price?: string;
+  currency?: CurrencyCode;
   videoLanguage: VideoLanguage;
   aspectRatio?: AspectRatioOption;
   km?: string;
@@ -1111,15 +1133,15 @@ function MediaSlide({
   // We intentionally scale small labels more aggressively than big headings.
   const format = aspectRatio ?? "16:9";
   const smallScale =
-    format === "9:16" ? 1.62
-    : format === "3:4" ? 1.46
-    : format === "1:1" ? 1.36
-    : 1.16;
+    format === "9:16" ? 2.65
+    : format === "3:4" ? 2.35
+    : format === "1:1" ? 2.20
+    : 1.95;
   const midScale =
-    format === "9:16" ? 1.18
-    : format === "3:4" ? 1.12
-    : format === "1:1" ? 1.08
-    : 1.0;
+    format === "9:16" ? 1.55
+    : format === "3:4" ? 1.48
+    : format === "1:1" ? 1.40
+    : 1.32;
   const fsSmall = (n: number) => Math.round(n * smallScale);
   /** Uppercase başlıklar, kategori rozetleri, spec etiketleri — fsSmall’dan bir kademe büyük */
   const fsHeading = (n: number) => Math.round(n * smallScale * 1.22);
@@ -1266,7 +1288,13 @@ function MediaSlide({
     filter: colorGrade + blurFilter,
   };
 
-  const cat = item.categoryLabelEn?.trim();
+  const cat = item.categoryId
+    ? resolveShotCategoryLabel(
+        videoLanguage,
+        item.categoryId,
+        item.categoryLabel ?? item.categoryLabelEn
+      )
+    : (item.categoryLabel ?? item.categoryLabelEn)?.trim();
   const categoryId = item.categoryId?.trim();
   const washPulse =
     sceneVariant === "color_wash"
@@ -1325,7 +1353,7 @@ function MediaSlide({
         ? { label: L.engineDisplacement, value: present(motorHacmi)!, highlight: false }
         : null,
       // price zorunlu: her zaman göster
-      { label: L.price, value: price, highlight: true },
+    present(price) ? { label: L.price, value: price!, highlight: true } : null,
     ]).filter(Boolean) as { label: string; value: string; highlight: boolean }[];
 
     return (
@@ -1483,7 +1511,7 @@ function MediaSlide({
           <div style={{ width: lineW, height: 2, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.12))", marginBottom: 22 }} />
           <div style={{ opacity: titleOp, transform: `translateX(${titleX}px)`, display: "flex", alignItems: "center", gap: 12, marginBottom: 32 }}>
             <div style={{ width: 3, height: 22, background: "#f8c96a", borderRadius: 2, boxShadow: "0 0 14px rgba(248,201,106,0.6)" }} />
-            <span style={{ fontFamily: "sans-serif", fontSize: 15, fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.70)", textTransform: "uppercase" }}>
+            <span style={{ fontFamily: "sans-serif", fontSize: uiFont(15), fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.70)", textTransform: "uppercase" }}>
               {title}
             </span>
           </div>
@@ -1503,7 +1531,7 @@ function MediaSlide({
                         <path d="M1.5 5L4 7.5L8.5 2.5" stroke="#f8c96a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                       </svg>
                     </div>
-                    <span style={{ fontFamily: "sans-serif", fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.82)", letterSpacing: "0.01em" }}>
+                    <span style={{ fontFamily: "sans-serif", fontSize: uiFont(14), fontWeight: 400, color: "rgba(255,255,255,0.82)", letterSpacing: "0.01em" }}>
                       {row.label}
                     </span>
                   </div>
@@ -1525,7 +1553,7 @@ function MediaSlide({
                     paddingTop: 13, paddingBottom: 13,
                     borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
                   }}>
-                    <div style={{ fontFamily: "sans-serif", fontSize: 14, letterSpacing: "0.12em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", marginBottom: 8 }}>
+                    <div style={{ fontFamily: "sans-serif", fontSize: uiFont(14), letterSpacing: "0.12em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", marginBottom: 8 }}>
                       {row.label}
                     </div>
                     {row.barPct !== undefined ? (
@@ -1533,12 +1561,12 @@ function MediaSlide({
                         <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
                           <div style={{ height: "100%", width: `${barW}%`, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.50))", borderRadius: 2, boxShadow: "0 0 8px rgba(248,201,106,0.36)" }} />
                         </div>
-                        <span style={{ fontFamily: "sans-serif", fontSize: 17, fontWeight: 700, color: "rgba(255,255,255,0.92)", minWidth: 110, textAlign: "right" }}>
+                        <span style={{ fontFamily: "sans-serif", fontSize: uiFont(17), fontWeight: 700, color: "rgba(255,255,255,0.92)", minWidth: 110, textAlign: "right" }}>
                           {row.value}
                         </span>
                       </div>
                     ) : (
-                      <span style={{ fontFamily: "sans-serif", fontSize: 17, fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>
+                      <span style={{ fontFamily: "sans-serif", fontSize: uiFont(17), fontWeight: 700, color: "rgba(255,255,255,0.92)" }}>
                         {row.value}
                       </span>
                     )}
@@ -1605,7 +1633,7 @@ function MediaSlide({
         <div style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: "55%", display: "flex", flexDirection: "column", justifyContent: "center", padding: "0 72px 0 44px" }}>
           <div style={{ width: lineW, height: 2, background: "#f8c96a", borderRadius: 1, marginBottom: 24, boxShadow: "0 0 14px rgba(248,201,106,0.55)" }} />
           <div style={{ opacity: titleOp, transform: `translateX(${titleX}px)`, marginBottom: 32 }}>
-            <span style={{ fontFamily: "sans-serif", fontSize: 16, letterSpacing: "0.16em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>{title}</span>
+            <span style={{ fontFamily: "sans-serif", fontSize: uiFont(16), letterSpacing: "0.16em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>{title}</span>
           </div>
 
           {isChecklist ? (
@@ -1620,7 +1648,7 @@ function MediaSlide({
                     <div style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(248,201,106,0.08)", border: "1.5px solid rgba(248,201,106,0.65)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transform: `scale(${ckS})` }}>
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5L4 7.5L8.5 2.5" stroke="#f8c96a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>
-                    <span style={{ fontFamily: "sans-serif", fontSize: 14, fontWeight: 400, color: "rgba(255,255,255,0.80)" }}>{row.label}</span>
+                    <span style={{ fontFamily: "sans-serif", fontSize: uiFont(14), fontWeight: 400, color: "rgba(255,255,255,0.80)" }}>{row.label}</span>
                   </div>
                 );
               })}
@@ -1636,16 +1664,16 @@ function MediaSlide({
                   : 0;
                 return (
                   <div key={ri} style={{ opacity: rOp, transform: `translateX(${rX}px)`, paddingTop: 12, paddingBottom: 12, borderBottom: ri < rows.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}>
-                    <div style={{ fontFamily: "sans-serif", fontSize: 15, letterSpacing: "0.11em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 8 }}>{row.label}</div>
+                    <div style={{ fontFamily: "sans-serif", fontSize: uiFont(15), letterSpacing: "0.11em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 8 }}>{row.label}</div>
                     {row.barPct !== undefined ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                         <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
                           <div style={{ height: "100%", width: `${bW}%`, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.48))", borderRadius: 2, boxShadow: "0 0 8px rgba(248,201,106,0.35)" }} />
                         </div>
-                        <span style={{ fontFamily: "sans-serif", fontSize: 18, fontWeight: 700, color: "#ffffff", minWidth: 108, textAlign: "right" }}>{row.value}</span>
+                        <span style={{ fontFamily: "sans-serif", fontSize: uiFont(18), fontWeight: 700, color: "#ffffff", minWidth: 108, textAlign: "right" }}>{row.value}</span>
                       </div>
                     ) : (
-                      <span style={{ fontFamily: "sans-serif", fontSize: 18, fontWeight: 700, color: "#ffffff" }}>{row.value}</span>
+                      <span style={{ fontFamily: "sans-serif", fontSize: uiFont(18), fontWeight: 700, color: "#ffffff" }}>{row.value}</span>
                     )}
                   </div>
                 );
@@ -1667,7 +1695,7 @@ function MediaSlide({
       { label: Tlb.uiBrand,  value: carBrand },
       { label: Tlb.uiModel,  value: carModel },
       { label: Tlb.uiYear,   value: year     },
-      { label: Tlb.labels.price,  value: price    },
+    ...(present(price) ? [{ label: Tlb.labels.price,  value: price! }] : []),
     ];
 
     return (
@@ -1687,11 +1715,11 @@ function MediaSlide({
           padding: "0 88px",
           borderBottom: "1px solid rgba(255,255,255,0.05)",
         }}>
-          <span style={{ fontFamily: "sans-serif", fontSize: 16, fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>
+          <span style={{ fontFamily: "sans-serif", fontSize: uiFont(16), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>
             {cat ?? carBrand}
           </span>
           <div style={{ marginLeft: 28, flex: 1, height: 1, background: "linear-gradient(to right, rgba(248,201,106,0.28), transparent)" }} />
-          <span style={{ fontFamily: "sans-serif", fontSize: 17, fontWeight: 500, letterSpacing: "0.12em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", textShadow: LABEL_SHADOW }}>
+          <span style={{ fontFamily: "sans-serif", fontSize: uiFont(17), fontWeight: 500, letterSpacing: "0.12em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", textShadow: LABEL_SHADOW }}>
             {carBrand} · {year}
           </span>
         </div>
@@ -1714,8 +1742,8 @@ function MediaSlide({
               <div key={si} style={{ display: "flex", alignItems: "center" }}>
                 {si > 0 && <div style={{ width: 1, height: 26, background: "rgba(255,255,255,0.08)", margin: "0 40px" }} />}
                 <div style={{ opacity: sOp, transform: `translateY(${sY}px)` }}>
-                  <div style={{ fontFamily: "sans-serif", fontSize: 17, letterSpacing: "0.14em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", marginBottom: 6, textShadow: LABEL_SHADOW }}>{stat.label}</div>
-                  <div style={{ fontFamily: "sans-serif", fontSize: si === 3 ? 22 : 17, fontWeight: si === 3 ? 700 : 500, color: si === 3 ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: "0.02em" }}>{stat.value}</div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: uiFont(17), letterSpacing: "0.14em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", marginBottom: 6, textShadow: LABEL_SHADOW }}>{stat.label}</div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: si === 3 ? uiFont(22) : uiFont(17), fontWeight: si === 3 ? 700 : 500, color: si === 3 ? "#f8c96a" : "rgba(255,255,255,0.88)", letterSpacing: "0.02em" }}>{stat.value}</div>
                 </div>
               </div>
             );
@@ -1826,7 +1854,7 @@ function MediaSlide({
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
           {cat && (
-            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 15, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
+            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: uiFont(15), fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
               {cat}
             </div>
           )}
@@ -1852,9 +1880,9 @@ function MediaSlide({
         }}>
           <Img src={right.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
-          {right.categoryLabelEn && (
-            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: 15, fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
-              {right.categoryLabelEn}
+          {(right.categoryLabel ?? right.categoryLabelEn) && (
+            <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: uiFont(15), fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
+              {right.categoryLabel ?? right.categoryLabelEn}
             </div>
           )}
         </div>
@@ -1896,7 +1924,7 @@ function MediaSlide({
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.5) 0%, transparent 45%)", pointerEvents: "none" }} />
           {cat && (
-            <div style={{ position: "absolute", bottom: 20, left: 22, fontFamily: "sans-serif", fontSize: 16, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase" }}>
+            <div style={{ position: "absolute", bottom: 20, left: 22, fontFamily: "sans-serif", fontSize: uiFont(16), fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase" }}>
               {cat}
             </div>
           )}
@@ -1914,9 +1942,9 @@ function MediaSlide({
         }}>
           <Img src={b.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
-          {b.categoryLabelEn && (
-            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 14, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
-              {b.categoryLabelEn}
+          {(b.categoryLabel ?? b.categoryLabelEn) && (
+            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: uiFont(14), fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
+              {b.categoryLabel ?? b.categoryLabelEn}
             </div>
           )}
         </div>
@@ -1933,9 +1961,9 @@ function MediaSlide({
         }}>
           <Img src={c.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
-          {c.categoryLabelEn && (
-            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: 14, fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
-              {c.categoryLabelEn}
+          {(c.categoryLabel ?? c.categoryLabelEn) && (
+            <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: uiFont(14), fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
+              {c.categoryLabel ?? c.categoryLabelEn}
             </div>
           )}
         </div>
@@ -2004,11 +2032,15 @@ function MediaSlide({
                 <div style={{ fontFamily: "sans-serif", fontSize: fsMid(18), fontWeight: 600, color: "rgba(255,255,255,0.80)" }}>{aracDurumuT}</div>
               </div>
             </>}
-            <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
-            <div>
-              <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.salePrice}</div>
-              <div style={{ fontFamily: "sans-serif", fontSize: fsMid(24), fontWeight: 700, color: "#f8c96a", textShadow: "0 0 18px rgba(248,201,106,0.38)" }}>{price}</div>
-            </div>
+            {present(price) && (
+              <>
+                <div style={{ width: 1, height: 36, background: "rgba(255,255,255,0.10)" }} />
+                <div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), letterSpacing: "0.22em", color: LABEL_COLOR, textTransform: "uppercase", marginBottom: 4, textShadow: LABEL_SHADOW }}>{T.salePrice}</div>
+                  <div style={{ fontFamily: "sans-serif", fontSize: fsMid(24), fontWeight: 700, color: "#f8c96a", textShadow: "0 0 18px rgba(248,201,106,0.38)" }}>{price}</div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Özet: motorGucu · km · kasa */}
@@ -2178,7 +2210,7 @@ function MediaSlide({
             present(renkT)
               ? { label: (T.labels.color), value: present(renkT)!, gold: false }
               : null,
-            { label: (T.labels.price), value: price, gold: true },
+            present(price) ? { label: (T.labels.price), value: price!, gold: true } : null,
           ].filter(Boolean) as { label: string; value: string; gold: boolean }[]).map((d, di) => {
             const dOp = interpolate(localFrame, [18 + di * 10, 38 + di * 10], [0, 1], { extrapolateRight: "clamp" });
             return (
@@ -2345,7 +2377,7 @@ function MediaSlide({
             textAlign: "center",
             pointerEvents: "none",
           }}>
-            <div style={{ fontFamily: "sans-serif", fontSize: 15, fontWeight: 800, letterSpacing: "0.22em", color: "#f8c96a", textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: uiFont(15), fontWeight: 800, letterSpacing: "0.22em", color: "#f8c96a", textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
             <div style={{ width: 40, height: 1.5, background: "rgba(248,201,106,0.5)", borderRadius: 1, margin: "0 auto" }} />
           </div>
         )}
@@ -2549,7 +2581,7 @@ function MediaSlide({
             border: "1px solid rgba(255,255,255,0.12)",
             backdropFilter: "blur(12px)",
             fontFamily: "system-ui, sans-serif",
-            fontSize: 17,
+            fontSize: uiFont(17),
             fontWeight: 600,
             letterSpacing: "0.07em",
             textTransform: "uppercase",
@@ -2660,7 +2692,7 @@ function KineticHud({
     motorHacmi ? { k: Th.hudVolume, v: motorHacmi } : null,
     cekis ? { k: Th.labels.drivetrain, v: translateEnumValue(videoLanguage, "drivetrain", cekis)! } : null,
     renk ? { k: Th.labels.color, v: translateEnumValue(videoLanguage, "color", renk)! } : null,
-    { k: Th.labels.price, v: price, gold: true },
+    present(price) ? { k: Th.labels.price, v: price!, gold: true } : null,
   ].filter(Boolean).slice(0, portrait ? 7 : 8) as { k: string; v: string; gold?: boolean }[];
 
   const tickerW = 520 + (chips.length * 160);
@@ -2680,7 +2712,7 @@ function KineticHud({
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {categoryLabelEn && (
             <div style={{ padding: "8px 12px", borderRadius: 12, background: "rgba(0,0,0,0.42)", border: "1px solid rgba(248,201,106,0.22)", backdropFilter: "blur(12px)" }}>
-              <span style={{ fontFamily: "system-ui, sans-serif", fontSize: 15, fontWeight: 800, letterSpacing: "0.15em", color: "#f8c96a", textTransform: "uppercase" }}>
+              <span style={{ fontFamily: "system-ui, sans-serif", fontSize: uiFont(15), fontWeight: 800, letterSpacing: "0.15em", color: "#f8c96a", textTransform: "uppercase" }}>
                 {categoryLabelEn}
               </span>
             </div>
@@ -2730,10 +2762,10 @@ function KineticHud({
                   minWidth: c.gold ? 220 : 180,
                 }}
               >
-                <div style={{ fontFamily: "sans-serif", fontSize: 14, fontWeight: 800, letterSpacing: "0.14em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>
+                <div style={{ fontFamily: "sans-serif", fontSize: uiFont(14), fontWeight: 800, letterSpacing: "0.14em", color: "rgba(255,255,255,0.68)", textTransform: "uppercase" }}>
                   {c.k}
                 </div>
-                <div style={{ fontFamily: "sans-serif", fontSize: c.gold ? (portrait ? 22 : 20) : 16, fontWeight: c.gold ? 800 : 700, color: c.gold ? "#f8c96a" : "rgba(255,255,255,0.92)", letterSpacing: "0.3px", textShadow: c.gold ? "0 0 18px rgba(248,201,106,0.35)" : "none" }}>
+                <div style={{ fontFamily: "sans-serif", fontSize: c.gold ? (portrait ? uiFont(22) : uiFont(20)) : uiFont(16), fontWeight: c.gold ? 800 : 700, color: c.gold ? "#f8c96a" : "rgba(255,255,255,0.92)", letterSpacing: "0.3px", textShadow: c.gold ? "0 0 18px rgba(248,201,106,0.35)" : "none" }}>
                   {c.v}
                 </div>
               </div>
@@ -3476,6 +3508,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   carModel,
   year,
   price,
+  currency,
   galleryName,
   ctaPhone,
   videoLanguage = "tr",
@@ -3535,13 +3568,31 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   const bgmDuck = voiceoverActive ? 0.18 : 1;
   const bgmVol = Math.max(0, Math.min(1, bgmVolume)) * bgmFade * bgmDuck;
 
+  const effectiveCurrency: CurrencyCode = currency ?? defaultCurrencyForLanguage(videoLanguage);
+  const formattedPrice =
+    formatPrice(price, { language: videoLanguage, currency: effectiveCurrency, style: "number" }) ??
+    price;
+
+  // Avoid "same info on loop": show price only on one dedicated shot (prefer price_reveal).
+  const priceFocusIndex = (() => {
+    const idx = mediaItems.findIndex((m) => (m.sceneVariant ?? "full_bleed") === "price_reveal");
+    if (idx >= 0) return idx;
+    if (mediaItems.length <= 1) return 0;
+    return Math.max(0, Math.floor(mediaItems.length * 0.6));
+  })();
+
+  // Ensure units are present even when seller input is just a number.
+  const kmU = ensureUnit(km, "km", /\bkm\b/i);
+  const motorGucuU = ensureUnit(motorGucu, "HP", /\b(hp|ps|cv|kw)\b/i);
+  const motorHacmiU = ensureUnit(motorHacmi, "cc", /\b(cc|cm3|cm³|l|lt|liter)\b/i);
+
   const listingForOutro: ListingPayload = translateListingValuesForVideo(videoLanguage, {
     carBrand,
     carModel,
     year,
-    price,
+    price: formattedPrice,
     ctaPhone,
-    km,
+    km: kmU,
     motor,
     renk,
     vites,
@@ -3549,8 +3600,8 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
     kasa,
     seri,
     aracDurumu,
-    motorGucu,
-    motorHacmi,
+    motorGucu: motorGucuU,
+    motorHacmi: motorHacmiU,
     cekis,
     garanti,
     agirHasarKayitli,
@@ -3605,11 +3656,11 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
       {mediaItems.map((item, i) => (
         <MediaSlide
           key={i} item={item} index={i} items={mediaItems} preset={preset}
-          carBrand={carBrand} carModel={carModel} year={year} price={price}
+          carBrand={carBrand} carModel={carModel} year={year} price={i === priceFocusIndex ? formattedPrice : undefined} currency={effectiveCurrency}
           videoLanguage={videoLanguage}
           aspectRatio={aspectRatio}
-          km={km} motor={motor} renk={renk} vites={vites} yakit={yakit} kasa={kasa}
-          seri={seri} aracDurumu={aracDurumu} motorGucu={motorGucu} motorHacmi={motorHacmi}
+          km={kmU} motor={motor} renk={renk} vites={vites} yakit={yakit} kasa={kasa}
+          seri={seri} aracDurumu={aracDurumu} motorGucu={motorGucuU} motorHacmi={motorHacmiU}
           cekis={cekis} garanti={garanti} agirHasarKayitli={agirHasarKayitli} plaka={plaka} ilanTarihi={ilanTarihi}
         />
       ))}
