@@ -1,37 +1,110 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { getOpenAI, getOpenAIModelIdentify } from "@/lib/openai";
+import { parseLanguageCode, type LanguageCode } from "@/lib/languages";
 
 interface IdentifyRequest {
   photos: { base64: string }[];
+  videoLanguage?: LanguageCode;
 }
 
 export async function POST(req: Request) {
   try {
-    const { photos }: IdentifyRequest = await req.json();
+    const { photos, videoLanguage: rawLang }: IdentifyRequest = await req.json();
     if (!photos?.length) {
       return NextResponse.json({ error: "Fotoğraf bulunamadı" }, { status: 400 });
     }
 
+    const videoLanguage: LanguageCode = parseLanguageCode(rawLang, "tr");
+
     const openai = getOpenAI();
     const model = getOpenAIModelIdentify();
 
-    const instruction = `Bu araç fotoğraflarını incele ve araç ilan formunu mümkün olduğunca doğru doldur.
+    const languageLine = `VIDEO LANGUAGE: ${videoLanguage}. All human-readable values you output must be in this language.`;
+    const enumsByLang: Record<LanguageCode, { gearbox: string[]; fuel: string[]; drivetrain: string[]; yesNo: string[]; conditionDefault: string }> = {
+      tr: {
+        gearbox: ["Manuel", "Otomatik", "Yarı Otomatik"],
+        fuel: ["Benzin", "Dizel", "LPG", "Benzin & LPG", "Elektrik", "Hibrit"],
+        drivetrain: ["Önden Çekiş", "Arkadan İtiş", "4x4", "AWD"],
+        yesNo: ["Evet", "Hayır"],
+        conditionDefault: "İkinci El",
+      },
+      en: {
+        gearbox: ["Manual", "Automatic", "Semi-automatic"],
+        fuel: ["Petrol", "Diesel", "LPG", "Petrol & LPG", "Electric", "Hybrid"],
+        drivetrain: ["FWD", "RWD", "4x4", "AWD"],
+        yesNo: ["Yes", "No"],
+        conditionDefault: "Used",
+      },
+      es: {
+        gearbox: ["Manual", "Automático", "Semiautomático"],
+        fuel: ["Gasolina", "Diésel", "GLP", "Gasolina y GLP", "Eléctrico", "Híbrido"],
+        drivetrain: ["Tracción delantera", "Tracción trasera", "4x4", "AWD"],
+        yesNo: ["Sí", "No"],
+        conditionDefault: "Usado",
+      },
+      fr: {
+        gearbox: ["Manuelle", "Automatique", "Semi-automatique"],
+        fuel: ["Essence", "Diesel", "GPL", "Essence & GPL", "Électrique", "Hybride"],
+        drivetrain: ["Traction", "Propulsion", "4x4", "AWD"],
+        yesNo: ["Oui", "Non"],
+        conditionDefault: "Occasion",
+      },
+      de: {
+        gearbox: ["Schaltgetriebe", "Automatik", "Halbautomatik"],
+        fuel: ["Benzin", "Diesel", "LPG", "Benzin & LPG", "Elektro", "Hybrid"],
+        drivetrain: ["Frontantrieb", "Heckantrieb", "4x4", "AWD"],
+        yesNo: ["Ja", "Nein"],
+        conditionDefault: "Gebraucht",
+      },
+      it: {
+        gearbox: ["Manuale", "Automatico", "Semiautomatico"],
+        fuel: ["Benzina", "Diesel", "GPL", "Benzina & GPL", "Elettrico", "Ibrido"],
+        drivetrain: ["Trazione anteriore", "Trazione posteriore", "4x4", "AWD"],
+        yesNo: ["Sì", "No"],
+        conditionDefault: "Usato",
+      },
+      ru: {
+        gearbox: ["Механика", "Автомат", "Робот"],
+        fuel: ["Бензин", "Дизель", "LPG", "Бензин и LPG", "Электро", "Гибрид"],
+        drivetrain: ["Передний привод", "Задний привод", "4x4", "AWD"],
+        yesNo: ["Да", "Нет"],
+        conditionDefault: "С пробегом",
+      },
+      pt: {
+        gearbox: ["Manual", "Automático", "Semiautomático"],
+        fuel: ["Gasolina", "Diesel", "GLP", "Gasolina & GLP", "Elétrico", "Híbrido"],
+        drivetrain: ["Tração dianteira", "Tração traseira", "4x4", "AWD"],
+        yesNo: ["Sim", "Não"],
+        conditionDefault: "Usado",
+      },
+    };
+    const enums = enumsByLang[videoLanguage] ?? enumsByLang.tr;
 
-Öncelik sırası:
-1) Fotoğrafta açıkça görünen bilgi
-2) Güçlü çıkarım (rozet, trim, kasa tipi, vites/çekiş/yenilikler gibi görsel ipuçları)
+    const instruction = `Analyze these car photos and fill the car listing form as accurately as possible.
+${languageLine}
 
-Kural:
-- Aşağıdaki alanlar fotoğrafta yoksa / çıkarılamıyorsa boş string ("") bırak ve ASLA uydurma/varsayma:
+Priority:
+1) Information clearly visible in the photos
+2) Strong visual inference (badges, trim cues, body shape, dashboard layout, etc.)
+
+Rules (strict):
+- If the following fields cannot be extracted from photos, return empty string "" and NEVER guess:
   price, km, ilanTarihi, garanti, agirHasarKayitli, plaka, ctaPhone
-- "price" ve "km" alanları özellikle kritik: fotoğrafta net değilse "" bırak (tahmin etme).
-- Diğer alanlarda (özellikle carBrand, carModel, year, kasa, yakit, vites, renk, cekis, motor*) mümkünse boş bırakma.
-- year alanı: kesin değilse bile, fotoğrafa göre en olası YAKIN yılı yaz (ör. kasa/ön-arka tasarım, far-stop, iç ekran, trim/rozet vb. ipuçlarıyla). Yine de hiçbir ipucu yoksa "" bırak.
-- Asla ek metin yazma; sadece JSON.
-- JSON içinde "-" / "—" gibi placeholder değerler kullanma; bilgi yoksa sadece "" döndür.
+- "price" and "km" are especially critical: if not clearly visible, return "".
+- For these fields, try not to leave them empty if you can infer reliably from visuals:
+  carBrand, carModel, year, kasa, yakit, vites, renk, cekis, motor, motorGucu, motorHacmi, seri
+- year: if not certain, write the most likely close year based on design cues. If no clue, return "".
+- Output ONLY JSON. No markdown, no extra text, no placeholders like "-" or "—".
 
-Aşağıdaki JSON formatında yanıt ver:
+Allowed enumerations (MUST use one of these exact strings when applicable):
+- vites (gearbox): ${enums.gearbox.map((s) => `"${s}"`).join(", ")}
+- yakit (fuel): ${enums.fuel.map((s) => `"${s}"`).join(", ")}
+- cekis (drivetrain): ${enums.drivetrain.map((s) => `"${s}"`).join(", ")}
+- garanti / agirHasarKayitli: ${enums.yesNo.map((s) => `"${s}"`).join(", ")} or "" if unknown
+- aracDurumu: if unknown, use "${enums.conditionDefault}"
+
+Return JSON in this exact format:
 {
   "carBrand": "",
   "carModel": "",
@@ -54,30 +127,7 @@ Aşağıdaki JSON formatında yanıt ver:
   "plaka": "",
   "ilanTarihi": ""
 }
-
-Kurallar:
-- carBrand: Marka adı (örn: "BMW", "Mercedes-Benz", "Toyota")
-- carModel: Model kodu (örn: "320Ci", "C180", "Corolla")
-- year: 4 haneli yıl (örn: "2003")
-- price: Fotoğrafta yoksa ""
-- ctaPhone: Fotoğrafta bir telefon numarası yoksa ""
-- km: Fotoğrafta yoksa ""
-- seri: Seri adı varsa (örn: "3 Serisi", "C Serisi") — yoksa ""
-- motor: Hacim + yakıt tipi (örn: "2.2L Benzin", "2.0 TDI") — yoksa ""
-- motorGucu: Güç HP cinsinden (örn: "170 HP") — yoksa ""
-- motorHacmi: cc cinsinden (örn: "2171 cc") — yoksa ""
-- kasa: Sedan, Hatchback, SUV, Coupe, Cabrio, Station Wagon vb. — yoksa ""
-- renk: Türkçe renk adı (örn: "Lacivert", "Gümüş Gri", "Siyah") — yoksa ""
-- vites: "Manuel", "Otomatik" veya "Yarı Otomatik" — yoksa ""
-- yakit: "Benzin", "Dizel", "LPG", "Benzin & LPG", "Elektrik", "Hibrit" — yoksa ""
-- cekis: "Önden Çekiş", "Arkadan İtiş", "4x4", "AWD" — yoksa ""
-- aracDurumu: Fotoğraftan anlaşılmıyorsa "İkinci El"
-- garanti: "Evet" / "Hayır" — fotoğrafta yoksa ""
-- agirHasarKayitli: "Evet" / "Hayır" — fotoğrafta yoksa ""
-- plaka: Plaka görünmüyorsa ""
-- ilanTarihi: Tarih görünmüyorsa ""
-
-Yanıtın tek bir JSON nesnesi olmalı; başka metin veya markdown kullanma.`;
+`;
 
     const userContent: OpenAI.Chat.ChatCompletionContentPart[] = [
       ...photos.slice(0, 5).map(

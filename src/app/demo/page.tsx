@@ -182,7 +182,7 @@ export default function DemoPage() {
       const res = await fetch("/api/identify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos }),
+        body: JSON.stringify({ photos, videoLanguage }),
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -199,7 +199,7 @@ export default function DemoPage() {
     } finally {
       setIsIdentifying(false);
     }
-  }, []);
+  }, [videoLanguage]);
 
   const addFiles = useCallback((fileList: FileList | null) => {
     if (!fileList) return;
@@ -317,6 +317,89 @@ export default function DemoPage() {
         };
       });
 
+      // Post-process storyboard to avoid showing the same info multiple times.
+      // We keep at most one "usage" data shot and one "engine" data shot.
+      const refineVariants = (items: MediaItem[]): MediaItem[] => {
+        const ar = aspectRatio;
+        const forbid = new Set<SceneVariant>(
+          ar === "9:16"
+            ? ["letter_box", "duo_split", "trio_mosaic"]
+            : ar === "3:4"
+            ? ["letter_box", "trio_mosaic"]
+            : ar === "1:1"
+            ? ["letter_box"]
+            : []
+        );
+
+        const hasEngine = Boolean(form.motor || form.motorGucu || form.motorHacmi || form.cekis);
+        const hasUsage = Boolean(form.km || form.vites || form.yakit || form.kasa || form.renk);
+
+        const usageVariants: SceneVariant[] = ["listing_panel", "stats_grid"];
+        const engineVariants: SceneVariant[] = ["split_specs", "card_panel", "feature_hero"];
+
+        const rawPool: SceneVariant[] = [
+          "ken_zoom_slow",
+          "spotlight",
+          "letter_box",
+          "editorial_left",
+          "editorial_right",
+          "duo_split",
+          "trio_mosaic",
+          "callout",
+          "split_band",
+        ];
+        const replacementPool: SceneVariant[] = rawPool.filter((v): v is SceneVariant => !forbid.has(v));
+
+        const pickReplacement = (i: number, original?: SceneVariant): SceneVariant => {
+          // Prefer detail-oriented layouts when the category hints a detail shot.
+          const cat = (items[i]?.categoryId ?? "").toLowerCase();
+          const isDetail = cat.includes("tire") || cat.includes("wheel") || cat.includes("cockpit");
+          if (isDetail && !forbid.has("callout")) return "callout";
+          // Avoid using spotlight too many times.
+          if (original !== "spotlight" && !forbid.has("spotlight")) return "ken_zoom_slow";
+          return replacementPool[i % replacementPool.length] ?? "ken_zoom_slow";
+        };
+
+        let usageKept = false;
+        let engineKept = false;
+        const out = items.map((it, i) => {
+          const v = it.sceneVariant;
+          if (!v) return it;
+
+          // If listing lacks data, don't allow data-heavy variants at all.
+          if (!hasUsage && usageVariants.includes(v)) {
+            return { ...it, sceneVariant: pickReplacement(i, v) };
+          }
+          if (!hasEngine && engineVariants.includes(v)) {
+            return { ...it, sceneVariant: pickReplacement(i, v) };
+          }
+
+          if (usageVariants.includes(v)) {
+            if (usageKept) return { ...it, sceneVariant: pickReplacement(i, v) };
+            usageKept = true;
+            return it;
+          }
+          if (engineVariants.includes(v)) {
+            if (engineKept) return { ...it, sceneVariant: pickReplacement(i, v) };
+            engineKept = true;
+            return it;
+          }
+          return it;
+        });
+
+        // Prevent consecutive identical variants after replacements.
+        for (let i = 1; i < out.length; i++) {
+          const prev = out[i - 1]?.sceneVariant;
+          const cur = out[i]?.sceneVariant;
+          if (prev && cur && prev === cur) {
+            out[i] = { ...out[i], sceneVariant: pickReplacement(i, cur) };
+          }
+        }
+        return out;
+      };
+
+      ordered = refineVariants(ordered);
+
       if (voiceoverEnabled) {
         setAnalyzePhase("Seslendirme üretiliyor…");
         const vo = await attachVoiceoverAudioToMediaItems(ordered, result.storyboard, videoLanguage);
@@ -371,9 +454,9 @@ export default function DemoPage() {
           </Link>
           <nav className="hidden md:flex items-center gap-8">
             <Link href="/#pricing" className="nav-link text-[var(--muted-foreground)] hover:text-[var(--primary)]">
-              Fiyatlar
+              {uiT(videoLanguage, "pricing")}
             </Link>
-            <span className="nav-link active">Editör</span>
+            <span className="nav-link active">{uiT(videoLanguage, "editor")}</span>
           </nav>
         </div>
         <div className="flex items-center gap-3">
@@ -381,7 +464,7 @@ export default function DemoPage() {
             Beta
           </span>
           <Link href="/" className="btn-pill-primary text-xs py-2 px-4">
-            Ana sayfa
+            {uiT(videoLanguage, "home")}
           </Link>
         </div>
       </header>
@@ -391,7 +474,7 @@ export default function DemoPage() {
           {step === "analyzing" ? (
             <div className="flex items-center gap-2 text-sm text-[var(--muted-foreground)]">
               <Brain className="w-4 h-4 text-[var(--primary)]" />
-              AI analizi
+              {uiT(videoLanguage, "aiAnalysis")}
             </div>
           ) : (
             <button
@@ -400,11 +483,11 @@ export default function DemoPage() {
               className="flex items-center gap-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
-              Geri dön
+              {uiT(videoLanguage, "back")}
             </button>
           )}
           <p className="text-xs text-[var(--muted-foreground)] sm:text-right">
-            {step === "preview" ? "Önizleme" : step === "identify" ? "Araç bilgileri" : "İşleniyor…"}
+            {step === "preview" ? uiT(videoLanguage, "preview") : step === "identify" ? uiT(videoLanguage, "vehicleInfo") : uiT(videoLanguage, "processing")}
           </p>
         </div>
       )}
@@ -450,6 +533,7 @@ export default function DemoPage() {
             onFormChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
             onConfirm={handleAnalyze}
             onBack={() => setStep("upload")}
+            videoLanguage={videoLanguage}
           />
         )}
 
@@ -553,6 +637,61 @@ const ASPECT_RATIO_OPTIONS: { value: AspectRatioOption; label: string; sub: stri
   { value: "4:3",  label: "4:3",  sub: "Klasik",  icon: "▭" },
   { value: "3:4",  label: "3:4",  sub: "Dikey+",  icon: "▮" },
 ];
+
+const UI_I18N: Record<LanguageCode, Record<string, string>> = {
+  tr: {
+    preview: "Önizleme",
+    vehicleInfo: "Araç bilgileri",
+    processing: "İşleniyor…",
+    aiAnalysis: "AI analizi",
+    back: "Geri dön",
+    editor: "Editör",
+    pricing: "Fiyatlar",
+    home: "Ana sayfa",
+    nextVehicleInfo: "İleri — Araç bilgileri",
+    checkVehicleInfoTitle: "Araç bilgilerini kontrol et",
+    checkVehicleInfoDesc: "AI fotoğraflardan bilgileri doldurdu — düzenleyip onaylayabilirsin.",
+    aiReviewing: "AI fotoğrafları inceliyor…",
+    aiWillAutofill: "Bilgiler otomatik doldurulacak, düzenleyebilirsin.",
+    required: "Zorunlu",
+    brand: "Marka",
+    model: "Model",
+    year: "Yıl",
+    price: "Fiyat",
+    km: "KM",
+  },
+  en: {
+    preview: "Preview",
+    vehicleInfo: "Vehicle info",
+    processing: "Processing…",
+    aiAnalysis: "AI analysis",
+    back: "Back",
+    editor: "Editor",
+    pricing: "Pricing",
+    home: "Home",
+    nextVehicleInfo: "Next — Vehicle info",
+    checkVehicleInfoTitle: "Review vehicle info",
+    checkVehicleInfoDesc: "AI filled details from photos — edit and confirm.",
+    aiReviewing: "AI is reviewing photos…",
+    aiWillAutofill: "Details will be auto-filled; you can edit them.",
+    required: "Required",
+    brand: "Brand",
+    model: "Model",
+    year: "Year",
+    price: "Price",
+    km: "Mileage",
+  },
+  es: {},
+  fr: {},
+  de: {},
+  it: {},
+  ru: {},
+  pt: {},
+};
+
+function uiT(lang: LanguageCode, key: string): string {
+  return UI_I18N[lang]?.[key] ?? UI_I18N.en[key] ?? key;
+}
 
 function UploadStep({
   mediaItems, isDragging, fileInputRef, error,
@@ -874,7 +1013,7 @@ function UploadStep({
                   : "bg-gradient-to-r from-[var(--teal)] to-[var(--primary)] text-[var(--primary-foreground)] shadow-lg shadow-[var(--primary)]/20 hover:opacity-95"
               }`}
             >
-              İleri — Araç bilgileri
+              {uiT(videoLanguage, "nextVehicleInfo")}
               {hasMedia && <ChevronRight className="w-5 h-5" />}
             </button>
           </div>
@@ -944,6 +1083,7 @@ function IdentifyStep({
   onFormChange,
   onConfirm,
   onBack,
+  videoLanguage,
 }: {
   mediaItems: MediaItem[];
   form: FormData;
@@ -954,6 +1094,7 @@ function IdentifyStep({
   onFormChange: (field: keyof FormData, value: string) => void;
   onConfirm: () => void;
   onBack: () => void;
+  videoLanguage: LanguageCode;
 }) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const requiredMissing = useMemo(() => {
@@ -966,7 +1107,7 @@ function IdentifyStep({
   const showRequiredUi = identifyAttempted && !isIdentifying;
   const isPriceMissing = showRequiredUi && !form.price.trim();
   const isKmMissing = showRequiredUi && !form.km.trim();
-  const pricePlaceholder = pricePlaceholderForCurrency(currency, "tr");
+  const pricePlaceholder = pricePlaceholderForCurrency(currency, videoLanguage);
 
   return (
     <div className="flex-1 overflow-auto px-4 py-6 sm:px-6 bg-[var(--background)]">
@@ -974,9 +1115,9 @@ function IdentifyStep({
 
         {/* Başlık */}
         <div>
-          <h2 className="text-lg font-bold text-[var(--foreground)]">Araç bilgilerini kontrol et</h2>
+          <h2 className="text-lg font-bold text-[var(--foreground)]">{uiT(videoLanguage, "checkVehicleInfoTitle")}</h2>
           <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
-            AI fotoğraflardan bilgileri doldurdu — düzenleyip onaylayabilirsin.
+            {uiT(videoLanguage, "checkVehicleInfoDesc")}
           </p>
         </div>
 
@@ -1005,8 +1146,8 @@ function IdentifyStep({
           <div className="flex items-center gap-3 rounded-[var(--radius)] border border-[var(--primary)]/30 bg-[var(--primary)]/[0.06] px-4 py-3">
             <Loader2 className="w-4 h-4 text-[var(--primary)] animate-spin shrink-0" />
             <div>
-              <p className="text-sm font-medium text-[var(--primary)]">AI fotoğrafları inceliyor…</p>
-              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Bilgiler otomatik doldurulacak, düzenleyebilirsin.</p>
+              <p className="text-sm font-medium text-[var(--primary)]">{uiT(videoLanguage, "aiReviewing")}</p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{uiT(videoLanguage, "aiWillAutofill")}</p>
             </div>
           </div>
         )}
@@ -1022,11 +1163,11 @@ function IdentifyStep({
                 <div key={field}>
                   <label className="flex items-center justify-between gap-2 text-xs text-[var(--muted-foreground)] mb-1.5">
                     <span>
-                      {field === "carBrand" ? "Marka" : field === "carModel" ? "Model" : field === "year" ? "Yıl" : "Fiyat"}
+                      {field === "carBrand" ? uiT(videoLanguage, "brand") : field === "carModel" ? uiT(videoLanguage, "model") : field === "year" ? uiT(videoLanguage, "year") : uiT(videoLanguage, "price")}
                     </span>
                     {showRequiredUi && field === "price" && (
                       <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
-                        Zorunlu
+                        {uiT(videoLanguage, "required")}
                       </span>
                     )}
                   </label>

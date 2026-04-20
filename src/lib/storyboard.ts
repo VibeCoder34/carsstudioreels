@@ -343,6 +343,7 @@ export function normalizePhotoAnalyzeResult(
       return rest;
     });
   }
+
   return {
     storyboard,
     editing_notes_tr: String(raw.editing_notes_tr ?? raw.editingNotes ?? ""),

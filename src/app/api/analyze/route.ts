@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { FIXED_CATEGORY_IDS } from "@/lib/photoCategories";
 import { getOpenAI, getOpenAIModelAnalyze } from "@/lib/openai";
 import { parseLanguageCode, type LanguageCode } from "@/lib/languages";
@@ -153,6 +154,10 @@ export async function POST(req: NextRequest) {
     }).join("\n");
 
     const maxRepeat = Math.max(2, Math.ceil(clean.length / 5));
+    const hasEngineSpec = Boolean(listing.motor || listing.motorGucu || listing.motorHacmi || listing.cekis);
+    const hasUsageSpec = Boolean(listing.km || listing.vites || listing.yakit || listing.kasa || listing.renk);
+    const hasMetaSpec = Boolean(listing.aracDurumu || listing.garanti || listing.agirHasarKayitli || listing.plaka || listing.ilanTarihi);
+    const hasAnySpecs = hasEngineSpec || hasUsageSpec || hasMetaSpec;
 
     // ── Shared header ────────────────────────────────────────────────────────
     const baseHeader = `You are a premium automotive video storyboard director.
@@ -194,6 +199,13 @@ WHAT EACH VARIANT DISPLAYS:
 • "price_reveal"    → Sol: büyük altın fiyat + marka + KM/Güç/Vites detayları; Sağ: foto kartı (FİYAT VURGUSU)
 • "spotlight"       → Tam ekran spot ışığı: merkez parlak, kenarlar çok koyu, arka planda marka watermark (DRAMATİK GİRİŞ)
 • "stats_grid"      → Üstte foto kartı, altta 2×2 istatistik grid: KM / Motor Gücü / Vites / Yakıt
+
+DATA AVAILABILITY (IMPORTANT):
+The editor must NOT show fake/speculated specs. Only use seller listing data.
+${hasAnySpecs ? "- Seller listing includes some spec fields." : "- Seller listing includes NO spec fields."}
+${hasEngineSpec ? "" : '- FORBIDDEN: "split_specs", "card_panel", "feature_hero" (no engine/drivetrain data provided).'}
+${hasUsageSpec ? "" : '- FORBIDDEN: "listing_panel", "stats_grid" (no usage data like km/gearbox/fuel/body/color provided).'}
+${hasEngineSpec || hasUsageSpec || hasMetaSpec ? "" : '- FORBIDDEN: "spec_table", "side_table", "floating_card" (no structured listing fields provided).'}
 
 TASK A — For EVERY photo, write a short on-screen critique in the VIDEO LANGUAGE above (store in field "comment_tr"; key name is legacy, content is NOT necessarily Turkish).
 TASK B — Assign exactly ONE unique category_id per photo:
@@ -516,11 +528,15 @@ ${jsonOutputBlock}`;
     const openai = getOpenAI();
     const model = getOpenAIModelAnalyze();
 
+    // Each analyze run should yield a different storyboard (unless caller pins it).
+    // Keep temperature modest to preserve structure while allowing variety.
+    const variationSeed = crypto.randomInt(1, 2_000_000_000);
+
     const completion = await openai.chat.completions.create({
       model,
       max_tokens: 8192,
-      temperature: 0,
-      seed: 42,
+      temperature: 0.35,
+      seed: variationSeed,
       messages: [{ role: "user", content: contentParts }],
       response_format: { type: "json_object" },
     });

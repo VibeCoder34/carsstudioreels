@@ -13,7 +13,7 @@ import type { SceneVariant } from "@/lib/photoCategories";
 import type { LanguageCode } from "@/lib/languages";
 import { translateEnumValue, translateListingValuesForVideo, translateYesNo } from "@/lib/vehicleEnumI18n";
 import { buildOutroGridRowsOnly, type ListingPayload } from "@/lib/listingPayload";
-import { getSpecTableData, type SpecCategory, type SpecRow } from "@/lib/specTableI18n";
+import { getSpecTableDataFromListing, type SpecCategory, type SpecRow } from "@/lib/specTableI18n";
 import { defaultCurrencyForLanguage, formatPrice, type CurrencyCode } from "@/lib/money";
 import { resolveShotCategoryLabel } from "@/lib/photoCategories";
 
@@ -106,6 +106,11 @@ export type PrestigeReelsProps = {
    * `mediaItems` içinde en az bir `audioSrc` varken true verin.
    */
   voiceoverSync?: boolean;
+  /**
+   * Görsel üstüne kategori etiketi (örn. "Detail", "Rear right") basılsın mı?
+   * Varsayılan: kapalı.
+   */
+  showShotLabels?: boolean;
 };
 
 /* ─── Zamanlama sabitleri ────────────────────────────────── */
@@ -827,15 +832,24 @@ function SpecTableOverlay({
   categoryId,
   categoryLabelEn,
   videoLanguage,
+  listing,
 }: {
   localFrame: number;
   categoryId?: string;
-  categoryLabelEn: string;
+  categoryLabelEn?: string;
   videoLanguage: VideoLanguage;
+  listing: ListingPayload;
 }) {
-  const category = detectSpecCategory(categoryId, categoryLabelEn);
-  const { title, rows } = getSpecTableData(videoLanguage)[category];
-  const isChecklist = category === "cockpit";
+  const data = getSpecTableDataFromListing(videoLanguage, listing);
+  const preferred = detectSpecCategory(categoryId, categoryLabelEn ?? "");
+  const order: SpecCategory[] = [preferred, "engine", "cockpit", "wheel", "dimensions"];
+  const category = order.find((c) => (data[c]?.rows?.length ?? 0) > 0) ?? preferred;
+  const block = data[category];
+  if (!block || block.rows.length === 0) return null;
+  const { title, rows } = block;
+  // Only treat "cockpit" as a checklist if the rows are actual feature bullets (✓).
+  // Listing-derived rows are key-value facts and should not drop the value.
+  const isChecklist = category === "cockpit" && rows.every((r) => (r.value ?? "").trim() === "✓");
 
   const panelY = interpolate(localFrame, [0, 24], [280, 0], {
     extrapolateRight: "clamp",
@@ -1079,6 +1093,7 @@ function MediaSlide({
   currency,
   videoLanguage,
   aspectRatio,
+  showShotLabels,
   km,
   motor,
   renk,
@@ -1106,6 +1121,7 @@ function MediaSlide({
   currency?: CurrencyCode;
   videoLanguage: VideoLanguage;
   aspectRatio?: AspectRatioOption;
+  showShotLabels?: boolean;
   km?: string;
   motor?: string;
   renk?: string;
@@ -1122,6 +1138,7 @@ function MediaSlide({
   plaka?: string;
   ilanTarihi?: string;
 }) {
+  const showLabels = showShotLabels === true;
   const vitesT = translateEnumValue(videoLanguage, "gearbox", vites);
   const yakitT = translateEnumValue(videoLanguage, "fuel", yakit);
   const cekisT = translateEnumValue(videoLanguage, "drivetrain", cekis);
@@ -1295,6 +1312,7 @@ function MediaSlide({
         item.categoryLabel ?? item.categoryLabelEn
       )
     : (item.categoryLabel ?? item.categoryLabelEn)?.trim();
+  const catUi = showLabels ? cat : undefined;
   const categoryId = item.categoryId?.trim();
   const washPulse =
     sceneVariant === "color_wash"
@@ -1302,7 +1320,7 @@ function MediaSlide({
       : 0;
 
   const splitBand =
-    sceneVariant === "split_band" && item.type === "image" && Boolean(cat);
+    showLabels && sceneVariant === "split_band" && item.type === "image" && Boolean(cat);
 
   if (splitBand) {
     return (
@@ -1334,7 +1352,7 @@ function MediaSlide({
               textTransform: "uppercase",
             }}
           >
-            {cat}
+            {catUi}
           </span>
         </div>
       </AbsoluteFill>
@@ -1471,9 +1489,34 @@ function MediaSlide({
 
   // ─── side_table: Sol foto + sağ kategori tablosu ─────────
   if (sceneVariant === "side_table") {
-    const category = detectSpecCategory(categoryId, cat ?? "exterior");
-    const { title, rows } = getSpecTableData(videoLanguage)[category];
-    const isChecklist = category === "cockpit";
+    const data = getSpecTableDataFromListing(videoLanguage, {
+      carBrand,
+      carModel,
+      year,
+      price,
+      km,
+      motor,
+      renk,
+      vites,
+      yakit,
+      kasa,
+      seri,
+      aracDurumu,
+      motorGucu,
+      motorHacmi,
+      cekis,
+      garanti,
+      agirHasarKayitli,
+      plaka,
+      ilanTarihi,
+    });
+    const preferred = detectSpecCategory(categoryId, cat ?? "exterior");
+    const order: SpecCategory[] = [preferred, "engine", "cockpit", "wheel", "dimensions"];
+    const category = order.find((c) => (data[c]?.rows?.length ?? 0) > 0) ?? preferred;
+    const block = data[category];
+    if (!block || block.rows.length === 0) return null;
+    const { title, rows } = block;
+    const isChecklist = category === "cockpit" && rows.every((r) => (r.value ?? "").trim() === "✓");
 
     const lineW    = interpolate(localFrame, [6, 26], [0, 48], { extrapolateRight: "clamp" });
     const titleOp  = interpolate(localFrame, [22, 38], [0, 1],  { extrapolateRight: "clamp" });
@@ -1583,7 +1626,7 @@ function MediaSlide({
   // ─── card_panel: Yuvarlak köşeli foto kartı + veri paneli ──
   if (sceneVariant === "card_panel") {
     const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
-    // Gerçek araç verisi varsa önce onu kullan; yoksa SPEC_DATA'ya dön
+    // Gerçek araç verisi varsa önce onu kullan; veri yoksa mock'a dönme (no speculation).
     const realEngineRows: SpecRow[] | null = (motorGucu || motorHacmi || cekis || yakit)
       ? [
           motorGucu  ? { label: T.labels.enginePower,        value: motorGucu  } : null,
@@ -1595,11 +1638,10 @@ function MediaSlide({
         ].filter(Boolean) as SpecRow[]
       : null;
 
-    const category = detectSpecCategory(categoryId, cat ?? "exterior");
-    const fallback = getSpecTableData(videoLanguage)[category];
-    const title = realEngineRows ? T.specSheetTitle : fallback.title;
-    const rows  = realEngineRows ?? fallback.rows;
-    const isChecklist = !realEngineRows && category === "cockpit";
+    if (!realEngineRows || realEngineRows.length === 0) return null;
+    const title = T.specSheetTitle;
+    const rows  = realEngineRows;
+    const isChecklist = false;
 
     const cardScale = interpolate(localFrame, [0, 24], [0.95, 1.0], { extrapolateRight: "clamp", easing: easeOut });
     const cardOp    = interpolate(localFrame, [0, 18], [0, 1], { extrapolateRight: "clamp" });
@@ -1716,7 +1758,7 @@ function MediaSlide({
           borderBottom: "1px solid rgba(255,255,255,0.05)",
         }}>
           <span style={{ fontFamily: "sans-serif", fontSize: uiFont(16), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>
-            {cat ?? carBrand}
+            {catUi ?? carBrand}
           </span>
           <div style={{ marginLeft: 28, flex: 1, height: 1, background: "linear-gradient(to right, rgba(248,201,106,0.28), transparent)" }} />
           <span style={{ fontFamily: "sans-serif", fontSize: uiFont(17), fontWeight: 500, letterSpacing: "0.12em", color: LABEL_COLOR_SOFT, textTransform: "uppercase", textShadow: LABEL_SHADOW }}>
@@ -1853,9 +1895,9 @@ function MediaSlide({
         }}>
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
-          {cat && (
+          {catUi && (
             <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: uiFont(15), fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
-              {cat}
+              {catUi}
             </div>
           )}
         </div>
@@ -1880,7 +1922,7 @@ function MediaSlide({
         }}>
           <Img src={right.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(7,7,13,0.65) 0%, transparent 40%)", pointerEvents: "none" }} />
-          {(right.categoryLabel ?? right.categoryLabelEn) && (
+          {showLabels && (right.categoryLabel ?? right.categoryLabelEn) && (
             <div style={{ position: "absolute", bottom: 18, left: 20, fontFamily: "sans-serif", fontSize: uiFont(15), fontWeight: 600, letterSpacing: "0.14em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase" }}>
               {right.categoryLabel ?? right.categoryLabelEn}
             </div>
@@ -1923,9 +1965,9 @@ function MediaSlide({
         }}>
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.5) 0%, transparent 45%)", pointerEvents: "none" }} />
-          {cat && (
+          {catUi && (
             <div style={{ position: "absolute", bottom: 20, left: 22, fontFamily: "sans-serif", fontSize: uiFont(16), fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase" }}>
-              {cat}
+              {catUi}
             </div>
           )}
         </div>
@@ -1942,7 +1984,7 @@ function MediaSlide({
         }}>
           <Img src={b.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
-          {(b.categoryLabel ?? b.categoryLabelEn) && (
+          {showLabels && (b.categoryLabel ?? b.categoryLabelEn) && (
             <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: uiFont(14), fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
               {b.categoryLabel ?? b.categoryLabelEn}
             </div>
@@ -1961,7 +2003,7 @@ function MediaSlide({
         }}>
           <Img src={c.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(6,6,12,0.55) 0%, transparent 50%)", pointerEvents: "none" }} />
-          {(c.categoryLabel ?? c.categoryLabelEn) && (
+          {showLabels && (c.categoryLabel ?? c.categoryLabelEn) && (
             <div style={{ position: "absolute", bottom: 14, left: 16, fontFamily: "sans-serif", fontSize: uiFont(14), fontWeight: 600, letterSpacing: "0.12em", color: "rgba(255,255,255,0.58)", textTransform: "uppercase" }}>
               {c.categoryLabel ?? c.categoryLabelEn}
             </div>
@@ -2000,9 +2042,9 @@ function MediaSlide({
         }}>
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           {/* Kategori rozeti */}
-          {cat && (
+          {catUi && (
             <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.28)", borderRadius: 8, padding: "5px 14px" }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{catUi}</span>
             </div>
           )}
         </div>
@@ -2095,9 +2137,9 @@ function MediaSlide({
         }}>
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,5,10,0.45) 0%, transparent 50%)", pointerEvents: "none" }} />
-          {cat && (
+          {catUi && (
             <div style={{ position: "absolute", bottom: 18, left: 20 }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "rgba(255,255,255,0.55)", textTransform: "uppercase" }}>{catUi}</span>
             </div>
           )}
         </div>
@@ -2190,7 +2232,7 @@ function MediaSlide({
         }}>
           <div style={{ width: lineW, height: 2.5, background: "#f8c96a", borderRadius: 2, marginBottom: 26, boxShadow: "0 0 14px rgba(248,201,106,0.52)" }} />
           <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), letterSpacing: "0.22em", color: "rgba(255,255,255,0.65)", textTransform: "uppercase", marginBottom: 14 }}>
-            {cat ?? T.vehicleDetail}
+            {catUi ?? T.vehicleDetail}
           </div>
           <div style={{ fontFamily: "sans-serif", fontSize: fsMid(40), fontWeight: 800, color: "#ffffff", lineHeight: 1.05, letterSpacing: "-0.5px", marginBottom: 6 }}>
             {carBrand}
@@ -2260,9 +2302,9 @@ function MediaSlide({
           padding: "0 64px 0 80px",
         }}>
           {/* Kategori etiketi */}
-          {cat && (
+          {catUi && (
             <div style={{ marginBottom: 20, opacity: textOp }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 800, letterSpacing: "0.28em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 800, letterSpacing: "0.28em", color: "#f8c96a", textTransform: "uppercase" }}>{catUi}</span>
             </div>
           )}
 
@@ -2367,7 +2409,7 @@ function MediaSlide({
         }} />
 
         {/* Kategori etiketi — merkez alt */}
-        {cat && (
+        {catUi && (
           <div style={{
             position: "absolute",
             bottom: "18%",
@@ -2377,7 +2419,7 @@ function MediaSlide({
             textAlign: "center",
             pointerEvents: "none",
           }}>
-            <div style={{ fontFamily: "sans-serif", fontSize: uiFont(15), fontWeight: 800, letterSpacing: "0.22em", color: "#f8c96a", textTransform: "uppercase", marginBottom: 8 }}>{cat}</div>
+            <div style={{ fontFamily: "sans-serif", fontSize: uiFont(15), fontWeight: 800, letterSpacing: "0.22em", color: "#f8c96a", textTransform: "uppercase", marginBottom: 8 }}>{catUi}</div>
             <div style={{ width: 40, height: 1.5, background: "rgba(248,201,106,0.5)", borderRadius: 1, margin: "0 auto" }} />
           </div>
         )}
@@ -2395,9 +2437,10 @@ function MediaSlide({
   // ─── stats_grid: Üstte foto kartı, altta 4 istatistik kutusu ────────────
   if (sceneVariant === "stats_grid") {
     const T = VIDEO_I18N[videoLanguage] ?? VIDEO_I18N.tr;
+    const portrait = aspectRatio ? needsBlurBackground(aspectRatio) : false;
     const photoOp  = interpolate(localFrame, [0, 22], [0, 1], { extrapolateRight: "clamp" });
     const photoY   = interpolate(localFrame, [0, 22], [16, 0], { extrapolateRight: "clamp", easing: easeOut });
-    const lineW    = interpolate(localFrame, [16, 34], [0, 56], { extrapolateRight: "clamp" });
+    const lineW    = interpolate(localFrame, [16, 34], [0, portrait ? 72 : 56], { extrapolateRight: "clamp" });
 
     const statItems = ([
       present(km) ? { label: T.labels.km, value: present(km)!, icon: "📍" } : null,
@@ -2410,49 +2453,108 @@ function MediaSlide({
 
     return (
       <AbsoluteFill style={{ opacity, background: "#04050a" }}>
+        {/* Backdrop: blurred cover fill (avoid empty space on portrait) */}
+        {portrait && (
+          <>
+            <Img
+              src={item.src}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                filter: `${colorGrade} blur(54px) brightness(0.52) saturate(1.15)`,
+                opacity: 0.92,
+                transform: `scale(${kbScale * 1.08}) translate(${kbTx * 0.25}px, ${kbTy * 0.25}px)`,
+                transformOrigin: "center center",
+              }}
+            />
+            <AbsoluteFill
+              style={{
+                pointerEvents: "none",
+                background:
+                  "radial-gradient(ellipse at 50% 35%, rgba(248,201,106,0.10) 0%, rgba(6,8,14,0.70) 55%, rgba(3,3,6,0.94) 100%)",
+              }}
+            />
+          </>
+        )}
+
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(175deg, rgba(6,18,50,0.55) 0%, transparent 55%)", pointerEvents: "none" }} />
 
         {/* ÜST: foto kartı — %47 yükseklik */}
         <div style={{
           position: "absolute",
-          top: 36, left: 40, right: 40,
-          height: "47%",
-          borderRadius: 20,
+          top: portrait ? 26 : 36,
+          left: portrait ? 26 : 40,
+          right: portrait ? 26 : 40,
+          height: portrait ? "54%" : "47%",
+          borderRadius: portrait ? 26 : 20,
           overflow: "hidden",
           opacity: photoOp,
           transform: `translateY(${photoY}px)`,
           boxShadow: "0 28px 80px rgba(0,0,0,0.72), 0 0 0 1px rgba(255,255,255,0.06)",
           background: "#04050a",
         }}>
-          <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
+          {/* Card backdrop */}
+          <Img
+            src={item.src}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              filter: `${colorGrade} blur(${portrait ? 18 : 12}px) brightness(0.65)`,
+              opacity: 0.9,
+              transform: `scale(${kbScale * 1.06}) translate(${kbTx * 0.2}px, ${kbTy * 0.2}px)`,
+              transformOrigin: "center center",
+            }}
+          />
+          {/* Foreground: never-cropped contain */}
+          <Img
+            src={item.src}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`,
+              transformOrigin: "center center",
+              filter: colorGrade,
+            }}
+          />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,5,10,0.50) 0%, transparent 45%)", pointerEvents: "none" }} />
           {/* Kategori + marka overlay */}
           <div style={{ position: "absolute", bottom: 16, left: 20, display: "flex", alignItems: "center", gap: 10 }}>
-            {cat && <div style={{ background: "rgba(0,0,0,0.60)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.30)", borderRadius: 8, padding: "4px 12px" }}>
-              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{cat}</span>
+            {catUi && <div style={{ background: "rgba(0,0,0,0.60)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.30)", borderRadius: 8, padding: "4px 12px" }}>
+              <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{catUi}</span>
             </div>}
             <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(13), fontWeight: 600, color: "rgba(255,255,255,0.70)", letterSpacing: "0.05em" }}>{carBrand} {carModel}</span>
           </div>
         </div>
 
         {/* ORTA: başlık çizgisi + araç adı */}
-        <div style={{ position: "absolute", top: "49%", left: 40, right: 40, padding: "12px 4px 10px" }}>
+        <div style={{ position: "absolute", top: portrait ? "58%" : "49%", left: portrait ? 26 : 40, right: portrait ? 26 : 40, padding: portrait ? "14px 4px 10px" : "12px 4px 10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 6 }}>
             <div style={{ width: lineW, height: 2, background: "linear-gradient(to right, #f8c96a, rgba(248,201,106,0.2))", borderRadius: 2, boxShadow: "0 0 10px rgba(248,201,106,0.4)" }} />
             <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.22em", color: "rgba(255,255,255,0.62)", textTransform: "uppercase", whiteSpace: "nowrap" }}>{carBrand} · {year}</span>
           </div>
-          <div style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 800, color: "#ffffff", letterSpacing: "-0.3px", lineHeight: 1 }}>{price}</div>
+          <div style={{ fontFamily: "sans-serif", fontSize: fsMid(22), fontWeight: 800, color: "#ffffff", letterSpacing: "-0.3px", lineHeight: 1 }}>{price}</div>
         </div>
 
         {/* ALT: 4 stat kutusu — 2x2 grid */}
         <div style={{
           position: "absolute",
-          bottom: 32, left: 40, right: 40,
-          height: "32%",
+          bottom: portrait ? 22 : 32,
+          left: portrait ? 26 : 40,
+          right: portrait ? 26 : 40,
+          height: portrait ? "34%" : "32%",
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
           gridTemplateRows: "1fr 1fr",
-          gap: 10,
+          gap: portrait ? 12 : 10,
         }}>
           {statItems.map((s, si) => {
             const d = 22 + si * 12;
@@ -2465,14 +2567,14 @@ function MediaSlide({
                 background: "rgba(255,255,255,0.05)",
                 border: "1px solid rgba(255,255,255,0.10)",
                 borderRadius: 14,
-                padding: "14px 18px",
+                padding: portrait ? "18px 18px" : "14px 18px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "center",
                 backdropFilter: "blur(12px)",
               }}>
                 <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), fontWeight: 700, letterSpacing: "0.16em", color: "rgba(255,255,255,0.60)", textTransform: "uppercase", marginBottom: 6 }}>{s.label}</div>
-                <div style={{ fontFamily: "sans-serif", fontSize: 22, fontWeight: 800, color: si === 1 ? "#f8c96a" : "rgba(255,255,255,0.95)", letterSpacing: "-0.2px", lineHeight: 1, textShadow: si === 1 ? "0 0 20px rgba(248,201,106,0.40)" : "none" }}>{s.value}</div>
+                <div style={{ fontFamily: "sans-serif", fontSize: fsMid(portrait ? 24 : 22), fontWeight: 800, color: si === 1 ? "#f8c96a" : "rgba(255,255,255,0.95)", letterSpacing: "-0.2px", lineHeight: 1, textShadow: si === 1 ? "0 0 20px rgba(248,201,106,0.40)" : "none" }}>{s.value}</div>
               </div>
             );
           })}
@@ -2549,7 +2651,7 @@ function MediaSlide({
       {showHud && (
         <KineticHud
           localFrame={localFrame}
-          categoryLabelEn={cat}
+          categoryLabelEn={showLabels ? cat : undefined}
           carBrand={carBrand}
           carModel={carModel}
           year={year}
@@ -2568,7 +2670,7 @@ function MediaSlide({
         />
       )}
 
-      {cat && (
+      {catUi && (
         <div
           style={{
             position: "absolute",
@@ -2588,7 +2690,7 @@ function MediaSlide({
             color: "rgba(255,255,255,0.92)",
           }}
         >
-          {cat}
+          {catUi}
         </div>
       )}
       {sceneVariant === "color_wash" && (
@@ -2620,8 +2722,8 @@ function MediaSlide({
       )}
 
       {/* callout: pulsing dot + çizgi + etiket balonu */}
-      {sceneVariant === "callout" && cat && (
-        <CalloutAnnotation localFrame={localFrame} label={cat} />
+      {sceneVariant === "callout" && catUi && (
+        <CalloutAnnotation localFrame={localFrame} label={catUi} />
       )}
 
       {/* spec_table: kategori bazlı animasyonlu bilgi tablosu */}
@@ -2629,8 +2731,30 @@ function MediaSlide({
         <SpecTableOverlay
           localFrame={localFrame}
           categoryId={categoryId}
-          categoryLabelEn={cat ?? "exterior"}
+          categoryLabelEn={showLabels ? (cat ?? "exterior") : undefined}
           videoLanguage={videoLanguage}
+          listing={{
+            carBrand,
+            carModel,
+            year,
+            price,
+            km,
+            motor,
+            renk,
+            vites,
+            yakit,
+            kasa,
+            seri,
+            aracDurumu,
+            motorGucu,
+            motorHacmi,
+            cekis,
+            garanti,
+            agirHasarKayitli,
+            plaka,
+            ilanTarihi,
+            ctaPhone: undefined,
+          }}
         />
       )}
     </AbsoluteFill>
@@ -3327,7 +3451,7 @@ function OutroFrame({
               style={{
                 fontFamily: "sans-serif",
                 fontWeight: 700,
-                fontSize: 38,
+                fontSize: 44,
                 color: "#ffffff",
                 letterSpacing: "1px",
               }}
@@ -3341,7 +3465,7 @@ function OutroFrame({
             style={{
               fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif",
               fontWeight: 700,
-              fontSize: isLandscape ? 56 : 74,
+              fontSize: isLandscape ? 64 : 86,
               color: "#ffffff",
               letterSpacing: "4px",
               textTransform: "uppercase",
@@ -3354,7 +3478,7 @@ function OutroFrame({
             style={{
               fontFamily: "sans-serif",
               fontWeight: 300,
-              fontSize: isLandscape ? 28 : 34,
+              fontSize: isLandscape ? 34 : 40,
               color: "rgba(255,255,255,0.62)",
               marginTop: 12,
               letterSpacing: "2.5px",
@@ -3368,7 +3492,7 @@ function OutroFrame({
               style={{
                 fontFamily: "sans-serif",
                 fontWeight: 600,
-                fontSize: isLandscape ? 22 : 26,
+                fontSize: isLandscape ? 26 : 30,
                 color: "rgba(255,255,255,0.78)",
                 marginTop: 14,
                 letterSpacing: "0.2em",
@@ -3394,7 +3518,7 @@ function OutroFrame({
             style={{
               fontFamily: "sans-serif",
               fontWeight: 700,
-              fontSize: isLandscape ? 46 : 56,
+              fontSize: isLandscape ? 54 : 66,
               color: "#f8c96a",
               letterSpacing: "1px",
               textShadow:
@@ -3433,7 +3557,7 @@ function OutroFrame({
                   <div
                     style={{
                       fontFamily: "sans-serif",
-                      fontSize: isLandscape ? 12 : 13,
+                      fontSize: isLandscape ? 14 : 16,
                       fontWeight: 700,
                       letterSpacing: "0.14em",
                       color: "rgba(255,255,255,0.55)",
@@ -3446,7 +3570,7 @@ function OutroFrame({
                   <div
                     style={{
                       fontFamily: "sans-serif",
-                      fontSize: isLandscape ? 17 : 18,
+                      fontSize: isLandscape ? 20 : 22,
                       fontWeight: 600,
                       color: "rgba(255,255,255,0.94)",
                       lineHeight: 1.35,
@@ -3479,14 +3603,14 @@ function OutroFrame({
                 : "0 8px 48px rgba(249,115,22,0.45)",
             }}
           >
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="white">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="white">
               <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
             </svg>
             <span
               style={{
                 fontFamily: "sans-serif",
                 fontWeight: 700,
-                fontSize: isLandscape ? 28 : 34,
+                fontSize: isLandscape ? 32 : 40,
                 color: "#ffffff",
                 letterSpacing: "0.5px",
               }}
@@ -3518,6 +3642,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
   aspectRatio,
   outroFrames = OUTRO_FRAMES,
   reelStyle = "cinematic",
+  showShotLabels = false,
   km,
   motor,
   renk,
@@ -3570,7 +3695,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
 
   const effectiveCurrency: CurrencyCode = currency ?? defaultCurrencyForLanguage(videoLanguage);
   const formattedPrice =
-    formatPrice(price, { language: videoLanguage, currency: effectiveCurrency, style: "number" }) ??
+    formatPrice(price, { language: videoLanguage, currency: effectiveCurrency, style: "currency" }) ??
     price;
 
   // Avoid "same info on loop": show price only on one dedicated shot (prefer price_reveal).
@@ -3659,6 +3784,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
           carBrand={carBrand} carModel={carModel} year={year} price={i === priceFocusIndex ? formattedPrice : undefined} currency={effectiveCurrency}
           videoLanguage={videoLanguage}
           aspectRatio={aspectRatio}
+          showShotLabels={showShotLabels}
           km={kmU} motor={motor} renk={renk} vites={vites} yakit={yakit} kasa={kasa}
           seri={seri} aracDurumu={aracDurumu} motorGucu={motorGucuU} motorHacmi={motorHacmiU}
           cekis={cekis} garanti={garanti} agirHasarKayitli={agirHasarKayitli} plaka={plaka} ilanTarihi={ilanTarihi}
@@ -3700,7 +3826,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
           carBrand={carBrand}
           carModel={carModel}
           year={year}
-          price={price}
+          price={formattedPrice}
           layout={effectiveLayout}
         />
       )}
@@ -3711,7 +3837,7 @@ export const PrestigeReels: React.FC<PrestigeReelsProps> = ({
           carBrand={carBrand}
           carModel={carModel}
           year={year}
-          price={price}
+          price={formattedPrice}
           galleryName={galleryName}
           ctaPhone={ctaPhone}
           videoLanguage={videoLanguage}

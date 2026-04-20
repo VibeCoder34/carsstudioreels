@@ -154,6 +154,11 @@ export async function POST(req: NextRequest) {
       inputProps,
       // crf: H.264 kalite (18 = yüksek kalite, 23 = varsayılan)
       crf: 18,
+      // Cloud Run / Docker container ortamında Chromium yolu ve sandbox ayarı
+      ...(process.env.CHROMIUM_PATH ? { browserExecutable: process.env.CHROMIUM_PATH } : {}),
+      // Note: Remotion v4 ChromiumOptions does not accept arbitrary `args`.
+      // Sandbox flags should be handled by the container/runtime configuration.
+      chromiumOptions: {},
       onProgress: ({ progress }) => {
         process.stdout.write(`\r[render] %${(progress * 100).toFixed(1)}`);
       },
