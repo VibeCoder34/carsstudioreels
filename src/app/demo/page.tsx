@@ -19,6 +19,7 @@ import {
   type StylePreset,
   type AspectRatioOption,
 } from "@/remotion/PrestigeReels";
+import { NeonReels } from "@/remotion/NeonReels";
 import { imageFileToBase64 } from "@/lib/frameExtractor";
 import {
   resolveShotCategoryLabel,
@@ -55,6 +56,7 @@ const Player = dynamic(
 );
 
 const FPS = 30;
+type TemplateId = "PrestigeReels" | "NeonReels";
 
 function isImageFile(file: File): boolean {
   if (file.type?.toLowerCase().startsWith("image/")) return true;
@@ -67,6 +69,79 @@ function isImageFile(file: File): boolean {
     name.endsWith(".heic") ||
     name.endsWith(".heif")
   );
+}
+
+function formatGroupedIntegerInput(raw: string, locale: string): string {
+  const digits = raw.replace(/[^\d]/g, "");
+  if (!digits) return "";
+  const n = Number(digits);
+  if (!Number.isFinite(n)) return "";
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: "decimal",
+      useGrouping: true,
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    // Fallback: Turkish-style grouping
+    return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
+}
+
+function placeholderFor(
+  lang: LanguageCode,
+  key:
+    | "search"
+    | "notes"
+    | "brand"
+    | "model"
+    | "year"
+    | "series"
+    | "km"
+    | "engine"
+    | "enginePower"
+    | "engineDisplacement"
+    | "plate"
+    | "phone"
+): string {
+  const L: Record<LanguageCode, Partial<Record<typeof key, string>>> = {
+    tr: {
+      search: "Plaka veya dosya adı ile ara…",
+      notes: 'Örn: "Daha agresif bir ton", "Fiyatı vurgula", "SUV aile aracı gibi anlat", "Minimal yazı"',
+      brand: "BMW",
+      model: "320i",
+      year: "2020",
+      series: "3 Serisi",
+      km: "0 km",
+      engine: "2.0L Benzin",
+      enginePower: "150 HP",
+      engineDisplacement: "1995 cc",
+      plate: "TR plakalı",
+      phone: "0532 123 45 67",
+    },
+    en: {
+      search: "Search by plate or filename…",
+      notes: 'E.g. "More aggressive tone", "Emphasize price", "Family SUV vibe", "Minimal text"',
+      brand: "BMW",
+      model: "320i",
+      year: "2020",
+      series: "3 Series",
+      km: "0 km",
+      engine: "2.0L Petrol",
+      enginePower: "150 hp",
+      engineDisplacement: "1995 cc",
+      plate: "Local plate",
+      phone: "+90 532 123 45 67",
+    },
+    es: {},
+    fr: {},
+    de: {},
+    it: {},
+    ru: {},
+    pt: {},
+  };
+
+  return L[lang]?.[key] ?? L.en[key] ?? "";
 }
 
 /* ─── Tipler ─────────────────────────────────────────────── */
@@ -152,6 +227,7 @@ export default function DemoPage() {
   });
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [identifyAttempted, setIdentifyAttempted] = useState(false);
+  const [templateId, setTemplateId] = useState<TemplateId>("PrestigeReels");
   const [reelStyle, setReelStyle] = useState<ReelStyle>("cinematic");
   const [videoLanguage, setVideoLanguage] = useState<LanguageCode>("tr");
   const [currency, setCurrency] = useState<CurrencyCode>(() => defaultCurrencyForLanguage("tr"));
@@ -499,6 +575,8 @@ export default function DemoPage() {
             isDragging={isDragging}
             fileInputRef={fileInputRef}
             error={analyzeError}
+            templateId={templateId}
+            onTemplateChange={setTemplateId}
             aspectRatio={aspectRatio}
             reelStyle={reelStyle}
             flowRec={flowRec}
@@ -547,6 +625,8 @@ export default function DemoPage() {
             form={form}
             totalFrames={totalFrames}
             analysisResult={analysisResult}
+            templateId={templateId}
+            onTemplateChange={setTemplateId}
             aspectRatio={aspectRatio}
             outroFrames={outroFrames}
             reelStyle={reelStyle}
@@ -695,6 +775,7 @@ function uiT(lang: LanguageCode, key: string): string {
 
 function UploadStep({
   mediaItems, isDragging, fileInputRef, error,
+  templateId, onTemplateChange,
   aspectRatio, reelStyle, flowRec,
   videoLanguage, videoNotes, musicTrackId, musicVolume, voiceoverEnabled,
   onVideoLanguageChange, onVideoNotesChange, onMusicTrackIdChange, onVoiceoverEnabledChange,
@@ -706,6 +787,8 @@ function UploadStep({
   isDragging: boolean;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   error: string;
+  templateId: TemplateId;
+  onTemplateChange: (id: TemplateId) => void;
   aspectRatio: AspectRatioOption;
   reelStyle: ReelStyle;
   flowRec: FlowRecommendation | null;
@@ -751,7 +834,7 @@ function UploadStep({
           <input
             type="search"
             className="input-pill input-pill--readonly"
-            placeholder="Plaka veya dosya adı ile ara…"
+            placeholder={placeholderFor(videoLanguage, "search")}
             readOnly
             aria-readonly
             tabIndex={-1}
@@ -856,6 +939,54 @@ function UploadStep({
               </div>
             )}
 
+            {/* Video şablonu */}
+            <div className="demo-card p-4 space-y-3">
+              <div className="demo-section-label">Video şablonu</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => onTemplateChange("PrestigeReels")}
+                  className={`relative flex flex-col items-center gap-1 p-3 rounded-[var(--radius)] border text-center transition-all ${
+                    templateId === "PrestigeReels"
+                      ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
+                      : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
+                  }`}
+                >
+                  <span className="text-xl leading-none">🏛️</span>
+                  <span className={`text-xs font-semibold ${templateId === "PrestigeReels" ? "text-[var(--primary)]" : ""}`}>
+                    Prestige
+                  </span>
+                  <span className="text-[10px] text-[var(--muted-foreground)] leading-tight">
+                    Editorial · Premium · Klasik
+                  </span>
+                  {templateId === "PrestigeReels" && (
+                    <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => onTemplateChange("NeonReels")}
+                  className={`relative flex flex-col items-center gap-1 p-3 rounded-[var(--radius)] border text-center transition-all ${
+                    templateId === "NeonReels"
+                      ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--foreground)]"
+                      : "border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/30"
+                  }`}
+                >
+                  <span className="text-xl leading-none">🟦</span>
+                  <span className={`text-xs font-semibold ${templateId === "NeonReels" ? "text-[var(--primary)]" : ""}`}>
+                    Neon HUD
+                  </span>
+                  <span className="text-[10px] text-[var(--muted-foreground)] leading-tight">
+                    Cyber · Scanlines · Data UI
+                  </span>
+                  {templateId === "NeonReels" && (
+                    <span className="absolute top-1.5 right-1.5 h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />
+                  )}
+                </button>
+              </div>
+            </div>
+
             {/* Video stili */}
             <div className="demo-card p-4 space-y-3">
               <div className="demo-section-label">Video stili</div>
@@ -948,7 +1079,7 @@ function UploadStep({
                   <textarea
                     value={videoNotes}
                     onChange={(e) => onVideoNotesChange(e.target.value)}
-                    placeholder='Örn: "Daha agresif bir ton", "Fiyatı vurgula", "SUV aile aracı gibi anlat", "Minimal yazı"'
+                    placeholder={placeholderFor(videoLanguage, "notes")}
                     className={`${INPUT_CLS} min-h-[90px] resize-y`}
                   />
                 </div>
@@ -1173,17 +1304,31 @@ function IdentifyStep({
                   </label>
                   <input
                     value={form[field]}
-                    onChange={(e) => onFormChange(field, e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (field !== "price") {
+                        onFormChange(field, v);
+                        return;
+                      }
+                      const locale = localeForLanguage(videoLanguage);
+                      onFormChange("price", formatGroupedIntegerInput(v, locale));
+                    }}
+                    onBlur={(e) => {
+                      if (field !== "price") return;
+                      const locale = localeForLanguage(videoLanguage);
+                      onFormChange("price", formatGroupedIntegerInput(e.target.value, locale));
+                    }}
                     placeholder={
                       field === "carBrand"
-                        ? "BMW"
+                        ? placeholderFor(videoLanguage, "brand")
                         : field === "carModel"
-                        ? "320i"
+                        ? placeholderFor(videoLanguage, "model")
                         : field === "year"
-                        ? "2020"
+                        ? placeholderFor(videoLanguage, "year")
                         : pricePlaceholder
                     }
                     className={INPUT_CLS}
+                    inputMode={field === "price" ? "numeric" : undefined}
                   />
                   {field === "price" && (
                     <div className="mt-2">
@@ -1216,10 +1361,10 @@ function IdentifyStep({
             <div className="grid grid-cols-2 gap-3">
               {(
                 [
-                  ["seri",      "Seri",        "3 Serisi"],
-                  ["km",        "KM",          "0 km"],
-                  ["motorGucu", "Motor Gücü",  "150 HP"],
-                  ["motorHacmi","Motor Hacmi", "1995 cc"],
+                  ["seri",      "Seri",        placeholderFor(videoLanguage, "series")],
+                  ["km",        "KM",          placeholderFor(videoLanguage, "km")],
+                  ["motorGucu", "Motor Gücü",  placeholderFor(videoLanguage, "enginePower")],
+                  ["motorHacmi","Motor Hacmi", placeholderFor(videoLanguage, "engineDisplacement")],
                 ] as [keyof FormData, string, string][]
               ).map(([field, label, placeholder]) => (
                 <div key={field}>
@@ -1284,7 +1429,7 @@ function IdentifyStep({
                   <input
                     value={form.motor}
                     onChange={(e) => onFormChange("motor", e.target.value)}
-                    placeholder="2.0L Benzin"
+                    placeholder={placeholderFor(videoLanguage, "engine")}
                     className={INPUT_CLS}
                   />
                 </div>
@@ -1305,7 +1450,7 @@ function IdentifyStep({
                   <input
                     value={form.plaka}
                     onChange={(e) => onFormChange("plaka", e.target.value)}
-                    placeholder="TR plakalı"
+                    placeholder={placeholderFor(videoLanguage, "plate")}
                     className={INPUT_CLS}
                   />
                 </div>
@@ -1326,7 +1471,7 @@ function IdentifyStep({
                   <input
                     value={form.ctaPhone}
                     onChange={(e) => onFormChange("ctaPhone", e.target.value)}
-                    placeholder="0532 123 45 67"
+                    placeholder={placeholderFor(videoLanguage, "phone")}
                     className={INPUT_CLS}
                   />
                 </div>
@@ -1452,6 +1597,8 @@ function PreviewStep({
   form,
   totalFrames,
   analysisResult,
+  templateId,
+  onTemplateChange,
   aspectRatio,
   outroFrames,
   reelStyle,
@@ -1465,6 +1612,8 @@ function PreviewStep({
   form: FormData;
   totalFrames: number;
   analysisResult: PhotoAnalyzeResult | null;
+  templateId: TemplateId;
+  onTemplateChange: (id: TemplateId) => void;
   aspectRatio: AspectRatioOption;
   outroFrames: number;
   reelStyle: ReelStyle;
@@ -1487,9 +1636,13 @@ function PreviewStep({
   const storyboard = analysisResult?.storyboard ?? [];
 
   /* ─── Render & download ─────────────────────────────────── */
+  /** ~2/3 çözünürlük: piksel sayısı ~%44 düşer, bulutta süre belirgin kısalır */
+  const fastExportScale = 2 / 3;
+  type Mp4ExportMode = "full" | "fast" | "turbo";
   const [isRendering, setIsRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState("");
   const [renderError, setRenderError] = useState("");
+  const [mp4ExportMode, setMp4ExportMode] = useState<Mp4ExportMode>("turbo");
 
   const handleDownload = async () => {
     setIsRendering(true);
@@ -1547,28 +1700,43 @@ function PreviewStep({
         bgmVolume: musicVolume,
       };
 
-      setRenderProgress("Video render ediliyor… (1-4 dk sürebilir)");
+      setRenderProgress(
+        mp4ExportMode === "turbo"
+          ? "Video render ediliyor (turbo — en hızlı)…"
+          : mp4ExportMode === "fast"
+          ? "Video render ediliyor (hızlı)…"
+          : "Video render ediliyor (tam çözünürlük)…"
+      );
 
       const res = await fetch("/api/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          compositionId: templateId,
           inputProps,
           width: compWidth,
           height: compHeight,
           fps: FPS,
+          ...(mp4ExportMode === "fast" ? { scale: fastExportScale } : {}),
+          ...(mp4ExportMode === "turbo" ? { renderTier: "turbo" } : {}),
         }),
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.details || err.error || "Render API hatası");
+        let errMsg = `HTTP ${res.status}`;
+        try {
+          const err = await res.json();
+          errMsg = err.details || err.error || errMsg;
+        } catch {
+          const text = await res.text().catch(() => "");
+          errMsg = text.slice(0, 200) || errMsg;
+        }
+        throw new Error(errMsg);
       }
 
       setRenderProgress("İndiriliyor…");
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
+      const { url } = await res.json();
       const a = document.createElement("a");
       a.href = url;
       a.download = `carstudio-${form.carBrand}-${form.carModel}-${form.year}.mp4`
@@ -1578,7 +1746,6 @@ function PreviewStep({
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
       setRenderProgress("");
     } catch (err) {
       console.error("[download]", err);
@@ -1617,7 +1784,7 @@ function PreviewStep({
             </div>
 
             <div className="mt-4 text-[11px] leading-relaxed text-white/60">
-              Bu işlem fotoğraf sayısına ve müzik/seslendirme kullanımına göre 1–4 dk sürebilir.
+              Turbo veya Hızlı mod bulutta çok daha kısa sürer; tam çözünürlük en uzun süredir.
             </div>
           </div>
         </div>
@@ -1679,7 +1846,7 @@ function PreviewStep({
               >
                 <Player
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  component={PrestigeReels as any}
+                  component={(templateId === "NeonReels" ? NeonReels : PrestigeReels) as any}
                   durationInFrames={totalFrames}
                   fps={FPS}
                   compositionWidth={compWidth}
@@ -1776,6 +1943,37 @@ function PreviewStep({
                 </div>
 
                 <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                  <div className="rounded-lg border border-[var(--border)] bg-[var(--muted)]/40 px-3 py-2.5 space-y-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-foreground)]">
+                      MP4 kalite / hız
+                    </div>
+                    {(
+                      [
+                        ["full", "Tam çözünürlük", "En net görüntü; bulutta en uzun sürer."],
+                        ["fast", "Hızlı", "~720p bandı; denge."],
+                        ["turbo", "Turbo", "~540p bandı + agresif encode; tek kutuda en kısa süre."],
+                      ] as const
+                    ).map(([value, title, desc]) => (
+                      <label
+                        key={value}
+                        className="flex items-start gap-2.5 cursor-pointer text-left"
+                      >
+                        <input
+                          type="radio"
+                          name="mp4-export"
+                          className="mt-0.5"
+                          checked={mp4ExportMode === value}
+                          onChange={() => setMp4ExportMode(value as Mp4ExportMode)}
+                          disabled={isRendering}
+                        />
+                        <span className="text-xs leading-snug text-[var(--foreground)]">
+                          <span className="font-medium">{title}</span>
+                          {" — "}
+                          {desc}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
                   <button
                     type="button"
                     onClick={handleDownload}

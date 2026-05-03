@@ -4,11 +4,13 @@ import {
   Img,
   Sequence,
   Video,
+  getRemotionEnvironment,
   interpolate,
   useCurrentFrame,
   useVideoConfig,
   spring,
 } from "remotion";
+
 import type { SceneVariant } from "@/lib/photoCategories";
 import type { LanguageCode } from "@/lib/languages";
 import { translateEnumValue, translateListingValuesForVideo, translateYesNo } from "@/lib/vehicleEnumI18n";
@@ -16,6 +18,16 @@ import { buildOutroGridRowsOnly, type ListingPayload } from "@/lib/listingPayloa
 import { getSpecTableDataFromListing, type SpecCategory, type SpecRow } from "@/lib/specTableI18n";
 import { defaultCurrencyForLanguage, formatPrice, type CurrencyCode } from "@/lib/money";
 import { resolveShotCategoryLabel } from "@/lib/photoCategories";
+
+// Render sırasında backdropFilter blur'ı kapat — swangle'da her frame için
+// tam GPU blur pass hesaplar, render'ı 5-10x yavaşlatır.
+function renderBlur(value: string): string | undefined {
+  try {
+    return getRemotionEnvironment().isRendering ? undefined : value;
+  } catch {
+    return value;
+  }
+}
 
 /* ─── Tipler ─────────────────────────────────────────────── */
 
@@ -676,8 +688,8 @@ function FloatingSpecCard({
         opacity: cardOpacity,
         transform: `translateX(${slideX}px)`,
         background: "rgba(4,4,8,0.76)",
-        backdropFilter: "blur(20px)",
-        WebkitBackdropFilter: "blur(20px)",
+        backdropFilter: renderBlur("blur(20px)"),
+        WebkitBackdropFilter: renderBlur("blur(20px)"),
         border: "1px solid rgba(248,201,106,0.22)",
         borderRadius: 20,
         padding: "28px 36px",
@@ -787,8 +799,8 @@ function CalloutAnnotation({ localFrame, label }: { localFrame: number; label: s
           transform: `scale(${bubbleScale})`,
           transformOrigin: "left center",
           background: "rgba(4,4,8,0.80)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
+          backdropFilter: renderBlur("blur(16px)"),
+          WebkitBackdropFilter: renderBlur("blur(16px)"),
           border: "1px solid rgba(248,201,106,0.28)",
           borderRadius: 12,
           padding: "12px 22px",
@@ -2043,7 +2055,7 @@ function MediaSlide({
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", filter: colorGrade }} />
           {/* Kategori rozeti */}
           {catUi && (
-            <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.28)", borderRadius: 8, padding: "5px 14px" }}>
+            <div style={{ position: "absolute", top: 16, left: 16, background: "rgba(0,0,0,0.55)", backdropFilter: renderBlur("blur(8px)"), border: "1px solid rgba(248,201,106,0.28)", borderRadius: 8, padding: "5px 14px" }}>
               <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{catUi}</span>
             </div>
           )}
@@ -2356,7 +2368,7 @@ function MediaSlide({
           <Img src={item.src} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", transform: `scale(${kbScale}) translate(${kbTx}px, ${kbTy}px)`, transformOrigin: "center center", filter: colorGrade }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(5,5,8,0.4) 0%, transparent 50%)", pointerEvents: "none" }} />
           {/* Yıl rozeti */}
-          <div style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.60)", backdropFilter: "blur(10px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "6px 14px" }}>
+          <div style={{ position: "absolute", top: 16, right: 16, background: "rgba(0,0,0,0.60)", backdropFilter: renderBlur("blur(10px)"), border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "6px 14px" }}>
             <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(12), fontWeight: 700, color: "rgba(255,255,255,0.88)", letterSpacing: "0.08em" }}>{year}</span>
           </div>
         </div>
@@ -2528,7 +2540,7 @@ function MediaSlide({
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(4,5,10,0.50) 0%, transparent 45%)", pointerEvents: "none" }} />
           {/* Kategori + marka overlay */}
           <div style={{ position: "absolute", bottom: 16, left: 20, display: "flex", alignItems: "center", gap: 10 }}>
-            {catUi && <div style={{ background: "rgba(0,0,0,0.60)", backdropFilter: "blur(8px)", border: "1px solid rgba(248,201,106,0.30)", borderRadius: 8, padding: "4px 12px" }}>
+            {catUi && <div style={{ background: "rgba(0,0,0,0.60)", backdropFilter: renderBlur("blur(8px)"), border: "1px solid rgba(248,201,106,0.30)", borderRadius: 8, padding: "4px 12px" }}>
               <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(10), fontWeight: 700, letterSpacing: "0.18em", color: "#f8c96a", textTransform: "uppercase" }}>{catUi}</span>
             </div>}
             <span style={{ fontFamily: "sans-serif", fontSize: fsHeading(13), fontWeight: 600, color: "rgba(255,255,255,0.70)", letterSpacing: "0.05em" }}>{carBrand} {carModel}</span>
@@ -2571,7 +2583,7 @@ function MediaSlide({
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "center",
-                backdropFilter: "blur(12px)",
+                backdropFilter: renderBlur("blur(12px)"),
               }}>
                 <div style={{ fontFamily: "sans-serif", fontSize: fsHeading(11), fontWeight: 700, letterSpacing: "0.16em", color: "rgba(255,255,255,0.60)", textTransform: "uppercase", marginBottom: 6 }}>{s.label}</div>
                 <div style={{ fontFamily: "sans-serif", fontSize: fsMid(portrait ? 24 : 22), fontWeight: 800, color: si === 1 ? "#f8c96a" : "rgba(255,255,255,0.95)", letterSpacing: "-0.2px", lineHeight: 1, textShadow: si === 1 ? "0 0 20px rgba(248,201,106,0.40)" : "none" }}>{s.value}</div>
@@ -2681,7 +2693,7 @@ function MediaSlide({
             borderRadius: 12,
             background: "rgba(0,0,0,0.45)",
             border: "1px solid rgba(255,255,255,0.12)",
-            backdropFilter: "blur(12px)",
+            backdropFilter: renderBlur("blur(12px)"),
             fontFamily: "system-ui, sans-serif",
             fontSize: uiFont(17),
             fontWeight: 600,
@@ -2835,7 +2847,7 @@ function KineticHud({
       <div style={{ position: "absolute", top: pad + 10, left: pad + 14, display: "flex", flexDirection: "column", gap: 6 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           {categoryLabelEn && (
-            <div style={{ padding: "8px 12px", borderRadius: 12, background: "rgba(0,0,0,0.42)", border: "1px solid rgba(248,201,106,0.22)", backdropFilter: "blur(12px)" }}>
+            <div style={{ padding: "8px 12px", borderRadius: 12, background: "rgba(0,0,0,0.42)", border: "1px solid rgba(248,201,106,0.22)", backdropFilter: renderBlur("blur(12px)") }}>
               <span style={{ fontFamily: "system-ui, sans-serif", fontSize: uiFont(15), fontWeight: 800, letterSpacing: "0.15em", color: "#f8c96a", textTransform: "uppercase" }}>
                 {categoryLabelEn}
               </span>
@@ -2864,7 +2876,7 @@ function KineticHud({
           overflow: "hidden",
           background: "rgba(0,0,0,0.30)",
           border: "1px solid rgba(255,255,255,0.10)",
-          backdropFilter: "blur(16px)",
+          backdropFilter: renderBlur("blur(16px)"),
           boxShadow: "0 18px 60px rgba(0,0,0,0.55)",
         }}
       >
@@ -3278,8 +3290,8 @@ function GalleryBadge({ name, layout }: { name: string; layout: "portrait" | "la
         alignItems: "center",
         gap: 12,
         background: "rgba(0,0,0,0.42)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
+        backdropFilter: renderBlur("blur(16px)"),
+        WebkitBackdropFilter: renderBlur("blur(16px)"),
         border: "1px solid rgba(255,255,255,0.10)",
         borderRadius: 20,
         padding: "14px 26px",
@@ -3345,6 +3357,10 @@ function OutroFrame({
   const { fps } = useVideoConfig();
   const localFrame = frame - outroStartFrame;
   const isLandscape = layout === "landscape";
+  const rowCount = specGridRows.length;
+  const denseGrid = rowCount >= 9;
+  const ultraDenseGrid = rowCount >= 11;
+  const twoCol = isLandscape || rowCount >= 7;
 
   if (localFrame < 0) return null;
 
@@ -3409,8 +3425,8 @@ function OutroFrame({
           style={{
             width: "100%",
             background: "rgba(255,255,255,0.06)",
-            backdropFilter: "blur(36px)",
-            WebkitBackdropFilter: "blur(36px)",
+            backdropFilter: renderBlur("blur(36px)"),
+            WebkitBackdropFilter: renderBlur("blur(36px)"),
             border: "1px solid rgba(255,255,255,0.10)",
             borderRadius: 44,
             padding: isLandscape ? "48px 64px" : "64px 72px",
@@ -3537,18 +3553,22 @@ function OutroFrame({
                 display: "flex",
                 flexWrap: "wrap",
                 justifyContent: "center",
-                gap: isLandscape ? "12px 20px" : "14px 16px",
+                gap: isLandscape
+                  ? denseGrid ? "10px 16px" : "12px 20px"
+                  : denseGrid ? "10px 14px" : "14px 16px",
                 maxWidth: 920,
+                // Prevent overflow on extreme listings (prefer compacting over clipping)
+                overflow: "hidden",
               }}
             >
               {specGridRows.map((row, ri) => (
                 <div
                   key={`${row.label}-${ri}`}
                   style={{
-                    minWidth: isLandscape ? "38%" : "100%",
-                    maxWidth: isLandscape ? "48%" : "100%",
+                    minWidth: twoCol ? "38%" : "100%",
+                    maxWidth: twoCol ? "48%" : "100%",
                     textAlign: "left",
-                    padding: "12px 16px",
+                    padding: ultraDenseGrid ? "9px 12px" : denseGrid ? "10px 14px" : "12px 16px",
                     borderRadius: 14,
                     background: "rgba(255,255,255,0.05)",
                     border: "1px solid rgba(255,255,255,0.08)",
@@ -3557,12 +3577,14 @@ function OutroFrame({
                   <div
                     style={{
                       fontFamily: "sans-serif",
-                      fontSize: isLandscape ? 14 : 16,
+                      fontSize: isLandscape
+                        ? denseGrid ? 12 : 14
+                        : denseGrid ? 13 : 16,
                       fontWeight: 700,
                       letterSpacing: "0.14em",
                       color: "rgba(255,255,255,0.55)",
                       textTransform: "uppercase",
-                      marginBottom: 6,
+                      marginBottom: denseGrid ? 4 : 6,
                     }}
                   >
                     {row.label}
@@ -3570,10 +3592,12 @@ function OutroFrame({
                   <div
                     style={{
                       fontFamily: "sans-serif",
-                      fontSize: isLandscape ? 20 : 22,
+                      fontSize: isLandscape
+                        ? ultraDenseGrid ? 16 : denseGrid ? 18 : 20
+                        : ultraDenseGrid ? 17 : denseGrid ? 19 : 22,
                       fontWeight: 600,
                       color: "rgba(255,255,255,0.94)",
-                      lineHeight: 1.35,
+                      lineHeight: denseGrid ? 1.25 : 1.35,
                       wordBreak: "break-word",
                     }}
                   >
@@ -3587,14 +3611,16 @@ function OutroFrame({
           {/* CTA butonu */}
           <div
             style={{
-              marginTop: isLandscape ? 36 : 52,
+              marginTop: isLandscape ? (denseGrid ? 26 : 36) : (denseGrid ? 34 : 52),
               opacity: ctaOpacity,
               transform: `scale(${ctaScale})`,
               background: ctaPhone
                 ? "linear-gradient(135deg, #25D366, #128C7E)"
                 : "linear-gradient(135deg, #f97316, #dc2626)",
               borderRadius: 24,
-              padding: isLandscape ? "22px 52px" : "28px 68px",
+              padding: isLandscape
+                ? (denseGrid ? "18px 44px" : "22px 52px")
+                : (denseGrid ? "22px 52px" : "28px 68px"),
               display: "flex",
               alignItems: "center",
               gap: 16,
@@ -3610,7 +3636,9 @@ function OutroFrame({
               style={{
                 fontFamily: "sans-serif",
                 fontWeight: 700,
-                fontSize: isLandscape ? 32 : 40,
+                fontSize: isLandscape
+                  ? (denseGrid ? 26 : 32)
+                  : (denseGrid ? 32 : 40),
                 color: "#ffffff",
                 letterSpacing: "0.5px",
               }}

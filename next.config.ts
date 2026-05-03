@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "@remotion/bundler",
     "@remotion/renderer",
+    "@remotion/cloudrun",
     "esbuild",
     "@esbuild/win32-x64",
   ],
